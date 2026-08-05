@@ -1,18 +1,98 @@
-const sessions = new Map();
+/*
+ * Service worker: capture orchestration.
+ *
+ * Design rule for this file: hold no capture state in module scope. Chrome may
+ * terminate this worker between any two events, so every read goes through the
+ * durable session store and every mutation is followed by a touch or a flush.
+ * The only module-level state permitted is derived, cheap to rebuild, and
+ * harmless to lose (the CDP clock offsets below).
+ */
 
-const MAX_EVENTS = 800;
+import {
+  createSession,
+  loadSession,
+  putSession,
+  deleteSession,
+  touch,
+  flush,
+  flushAll,
+  pushEvent,
+  pushNavigation,
+  entryGet,
+  entrySet,
+  entryValues,
+  windowedEvidence,
+  LIMITS
+} from "./session-store.js";
+
+import {
+  BODY_MIME,
+  redactHeaders,
+  redactText,
+  sanitizeValue,
+  stringifySafe
+} from "./redact.js";
+
 const MAX_BODY_BYTES = 1_000_000;
 
-const BODY_MIME =
-  /json|text|javascript|xml|graphql|x-www-form-urlencoded/i;
+const CDP_DOMAINS = [
+  [
+    "Network.enable",
+    {
+      maxTotalBufferSize: 20_000_000,
+      maxResourceBufferSize: 2_000_000,
+      maxPostDataSize: 1_000_000
+    }
+  ],
+  ["Runtime.enable", undefined],
+  ["Log.enable", undefined],
+  ["Page.enable", undefined],
+  ["DOM.enable", undefined],
+  ["CSS.enable", undefined],
+  ["Accessibility.enable", undefined],
+  ["Performance.enable", undefined]
+];
 
-const SECRET_KEY =
-  /authorization|cookie|set-cookie|token|secret|password|passwd|api[-_]?key|session|jwt/i;
+const SNAPSHOT_STYLES = [
+  "display",
+  "position",
+  "z-index",
+  "width",
+  "height",
+  "margin-top",
+  "margin-right",
+  "margin-bottom",
+  "margin-left",
+  "padding-top",
+  "padding-right",
+  "padding-bottom",
+  "padding-left",
+  "font-family",
+  "font-size",
+  "font-weight",
+  "line-height",
+  "color",
+  "background-color",
+  "border-radius",
+  "overflow",
+  "opacity",
+  "transform"
+];
+
+/*
+ * Derived, disposable: maps a tab's CDP monotonic clock onto wall time. Lost on
+ * worker restart, which only costs a slightly less precise offset.
+ */
+const clockOffsets = new Map();
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel
     .setPanelBehavior({ openPanelOnActionClick: true })
     .catch(() => {});
+});
+
+chrome.runtime.onSuspend?.addListener(() => {
+  void flushAll();
 });
 
 chrome.runtime.onConnect.addListener((port) => {
@@ -30,13 +110,7 @@ chrome.debugger.onEvent.addListener((source, method, params) => {
     return;
   }
 
-  const session = sessions.get(source.tabId);
-
-  if (!session) {
-    return;
-  }
-
-  void handleDebuggerEvent(source.tabId, method, params, session);
+  void handleDebuggerEvent(source, method, params);
 });
 
 chrome.debugger.onDetach.addListener((source, reason) => {
@@ -44,16 +118,82 @@ chrome.debugger.onDetach.addListener((source, reason) => {
     return;
   }
 
-  const session = sessions.get(source.tabId);
+  void (async () => {
+    const session = await loadSession(source.tabId);
 
-  if (!session) {
-    return;
-  }
+    if (!session) {
+      return;
+    }
 
-  session.attached = false;
-  session.detachReason = reason;
+    session.attached = false;
+    session.detachReason = reason;
 
-  broadcastStatus(source.tabId);
+    /*
+     * Detach is exactly the moment a naive implementation loses everything, so
+     * this flush is awaited rather than debounced.
+     */
+    await flush(source.tabId);
+
+    broadcastStatus(source.tabId);
+  })();
+});
+
+/*
+ * Navigation resilience. A single-page-app route change keeps the content
+ * script alive; a real document load does not. Re-inject and re-arm so the
+ * overlay does not silently disappear mid-capture.
+ */
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  void (async () => {
+    const session = await loadSession(tabId);
+
+    if (!session?.armed) {
+      return;
+    }
+
+    if (changeInfo.status === "loading" && changeInfo.url) {
+      pushNavigation(session, {
+        url: redactText(changeInfo.url),
+        timeMs: Date.now(),
+        timestamp: new Date().toISOString(),
+        kind: "document-load"
+      });
+
+      await flush(tabId);
+
+      return;
+    }
+
+    if (changeInfo.status !== "complete") {
+      return;
+    }
+
+    try {
+      await injectContentScript(tabId);
+
+      await chrome.tabs.sendMessage(tabId, { type: "CC_START" });
+    } catch (error) {
+      pushEvent(session, {
+        category: "extension",
+        level: "warning",
+        timeMs: Date.now(),
+        timestamp: new Date().toISOString(),
+        text:
+          "Could not re-arm the overlay after navigation: " +
+          toErrorMessage(error)
+      });
+    }
+
+    await flush(tabId);
+
+    broadcastStatus(tabId);
+  })();
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  clockOffsets.delete(tabId);
+
+  void deleteSession(tabId);
 });
 
 async function handlePanelMessage(message, port) {
@@ -89,18 +229,17 @@ async function handlePanelMessage(message, port) {
         break;
 
       case "CAPTURE_FRAME":
-        result = await captureFrame(message.intent || {});
+        result = await captureFrame(
+          message.intent || {},
+          message.options || {}
+        );
         break;
 
       default:
         throw new Error(`Unknown message type: ${message.type}`);
     }
 
-    port.postMessage({
-      requestId,
-      ok: true,
-      result
-    });
+    port.postMessage({ requestId, ok: true, result });
   } catch (error) {
     port.postMessage({
       requestId,
@@ -125,7 +264,7 @@ async function getActiveTab() {
 
 async function getStatus() {
   const tab = await getActiveTab();
-  const session = sessions.get(tab.id);
+  const session = await loadSession(tab.id);
 
   return {
     tabId: tab.id,
@@ -133,64 +272,110 @@ async function getStatus() {
     url: tab.url || "",
     armed: Boolean(session?.armed),
     attached: Boolean(session?.attached),
+
+    armedAt: session?.startedAt
+      ? new Date(session.startedAt).toISOString()
+      : null,
+
     eventCount: session?.events.length || 0,
-    requestCount: session?.requests.size || 0,
-    detachReason: session?.detachReason || null
+    requestCount: session?.requests.length || 0,
+    bodyCount: session?.responseBodies.length || 0,
+    navigationCount: session?.navigations.length || 0,
+
+    limits: LIMITS,
+    detachReason: session?.detachReason || null,
+
+    lastFlushedAt: session?.lastFlushedAt
+      ? new Date(session.lastFlushedAt).toISOString()
+      : null
   };
+}
+
+async function injectContentScript(tabId) {
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ["content.js"]
+  });
 }
 
 async function armActiveTab() {
   const tab = await getActiveTab();
   const tabId = tab.id;
 
-  let session = sessions.get(tabId);
+  let session = await loadSession(tabId);
 
   if (!session) {
-    session = {
-      tabId,
-      armed: true,
-      attached: false,
-      startedAt: Date.now(),
-      events: [],
-      requests: new Map(),
-      responseBodies: new Map(),
-      detachReason: null
-    };
-
-    sessions.set(tabId, session);
+    session = createSession(tabId);
   }
 
+  session.armed = true;
+  session.detachReason = null;
+
   if (!session.attached) {
-    await chrome.debugger.attach({ tabId }, "0.1");
+    try {
+      await chrome.debugger.attach({ tabId }, "1.3");
+    } catch (error) {
+      const text = toErrorMessage(error);
+
+      /*
+       * Attaching twice is harmless; DevTools already owning the tab is not,
+       * and the user needs to be told which of the two happened.
+       */
+      if (!/already attached/i.test(text)) {
+        throw new Error(
+          `Could not attach the debugger: ${text}. ` +
+            "Close DevTools on this tab and try again."
+        );
+      }
+    }
 
     session.attached = true;
 
-    await Promise.all([
-      cdp(tabId, "Network.enable", {
-        maxTotalBufferSize: 20_000_000,
-        maxResourceBufferSize: 2_000_000,
-        maxPostDataSize: 1_000_000
-      }),
+    for (const [method, params] of CDP_DOMAINS) {
+      try {
+        await cdp(tabId, method, params);
+      } catch (error) {
+        pushEvent(session, {
+          category: "extension",
+          level: "warning",
+          timeMs: Date.now(),
+          timestamp: new Date().toISOString(),
+          text: `${method} failed: ${toErrorMessage(error)}`
+        });
+      }
+    }
 
-      cdp(tabId, "Runtime.enable"),
-      cdp(tabId, "Log.enable"),
-      cdp(tabId, "Page.enable"),
-      cdp(tabId, "DOM.enable"),
-      cdp(tabId, "CSS.enable"),
-      cdp(tabId, "Accessibility.enable")
-    ]);
+    /*
+     * Flat auto-attach so out-of-process iframes and workers arrive as child
+     * sessions instead of vanishing. Their events are recorded with the
+     * originating sessionId; enabling domains inside each child target is the
+     * next implementation pass.
+     */
+    try {
+      await cdp(tabId, "Target.setAutoAttach", {
+        autoAttach: true,
+        waitForDebuggerOnStart: false,
+        flatten: true
+      });
+    } catch (error) {
+      pushEvent(session, {
+        category: "extension",
+        level: "warning",
+        timeMs: Date.now(),
+        timestamp: new Date().toISOString(),
+        text:
+          "Target.setAutoAttach failed; child frames and workers " +
+          "will not be captured: " +
+          toErrorMessage(error)
+      });
+    }
   }
 
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    files: ["content.js"]
-  });
+  await injectContentScript(tabId);
 
-  await chrome.tabs.sendMessage(tabId, {
-    type: "CC_START"
-  });
+  await chrome.tabs.sendMessage(tabId, { type: "CC_START" });
 
-  session.armed = true;
+  await putSession(session);
 
   broadcastStatus(tabId);
 
@@ -199,27 +384,25 @@ async function armActiveTab() {
 
 async function stopActiveTab() {
   const tab = await getActiveTab();
-  const session = sessions.get(tab.id);
+  const session = await loadSession(tab.id);
 
   try {
-    await chrome.tabs.sendMessage(tab.id, {
-      type: "CC_STOP"
-    });
+    await chrome.tabs.sendMessage(tab.id, { type: "CC_STOP" });
   } catch {
-    // The content script may no longer exist after a navigation.
+    /* The content script may be gone after a navigation. */
   }
 
   if (session?.attached) {
     try {
-      await chrome.debugger.detach({
-        tabId: tab.id
-      });
+      await chrome.debugger.detach({ tabId: tab.id });
     } catch {
-      // Already detached.
+      /* Already detached. */
     }
   }
 
-  sessions.delete(tab.id);
+  clockOffsets.delete(tab.id);
+
+  await deleteSession(tab.id);
 
   return getStatus();
 }
@@ -230,69 +413,82 @@ async function sendToActiveTab(message) {
   return chrome.tabs.sendMessage(tab.id, message);
 }
 
-async function captureFrame(intent) {
+async function captureFrame(intent, options) {
   const tab = await getActiveTab();
-  const session = sessions.get(tab.id);
+  const session = await loadSession(tab.id);
 
-  if (!session?.armed || !session.attached) {
+  if (!session?.armed) {
     throw new Error("Arm capture before adding a frame.");
   }
 
-  const pageContext = await chrome.tabs.sendMessage(tab.id, {
-    type: "CC_PREPARE_CAPTURE",
-    intent
-  });
+  if (!session.attached) {
+    throw new Error(
+      "The debugger detached" +
+        (session.detachReason ? ` (${session.detachReason})` : "") +
+        ". Re-arm capture before adding a frame."
+    );
+  }
+
+  let pageContext;
+
+  try {
+    pageContext = await chrome.tabs.sendMessage(tab.id, {
+      type: "CC_PREPARE_CAPTURE",
+      intent
+    });
+  } catch {
+    /*
+     * The overlay died with the previous document. Bring it back and tell the
+     * user plainly rather than exporting an empty frame.
+     */
+    await injectContentScript(tab.id).catch(() => {});
+
+    await chrome.tabs
+      .sendMessage(tab.id, { type: "CC_START" })
+      .catch(() => {});
+
+    throw new Error(
+      "The page navigated and the selection was lost. " +
+        "Re-select the element, then add the frame again."
+    );
+  }
+
+  if (
+    !pageContext?.selections?.length &&
+    !pageContext?.captureRegion
+  ) {
+    throw new Error(
+      "Select an element or drag a region before adding a frame."
+    );
+  }
 
   let screenshotDataUrl;
 
   try {
     screenshotDataUrl = await chrome.tabs.captureVisibleTab(
       tab.windowId,
-      {
-        format: "png"
-      }
+      { format: "png" }
     );
   } finally {
     await chrome.tabs
-      .sendMessage(tab.id, {
-        type: "CC_CAPTURE_DONE"
-      })
+      .sendMessage(tab.id, { type: "CC_CAPTURE_DONE" })
       .catch(() => {});
   }
 
   const cdpContext = await captureCdpContext(
     tab.id,
-    pageContext
+    pageContext,
+    options
   );
 
-  const appContext = await captureAppBridge(
-    tab.id,
-    pageContext
-  );
+  const appContext = await captureAppBridge(tab.id, pageContext);
 
   const now = Date.now();
 
-  const runtime = {
-    captureWindow: {
-      armedAt: new Date(session.startedAt).toISOString(),
-      capturedAt: new Date(now).toISOString()
-    },
+  const runtime = windowedEvidence(session, now);
 
-    events: session.events.filter(
-      (event) => now - event.timeMs <= 60_000
-    ),
-
-    requests: Array.from(session.requests.values())
-      .filter(
-        (request) => now - request.timeMs <= 60_000
-      )
-      .map((request) => ({
-        ...request,
-        responseBody:
-          session.responseBodies.get(request.requestId) ||
-          null
-      }))
-  };
+  /* Capture is a visible checkpoint: never leave it unflushed. */
+  await flush(tab.id);
 
   return {
     capturedAt: new Date(now).toISOString(),
@@ -306,59 +502,49 @@ async function captureFrame(intent) {
 
 async function captureAppBridge(tabId, pageContext) {
   try {
-    const selectors = (
-      pageContext?.selections || []
-    ).map((selection) => selection.selector);
-
-    const [result] =
-      await chrome.scripting.executeScript({
-        target: { tabId },
-        world: "MAIN",
-
-        func: async (selectedSelectors) => {
-          const bridge =
-            globalThis.__CONTEXT_CAPSULE_BRIDGE__;
-
-          if (
-            !bridge ||
-            typeof bridge.snapshot !== "function"
-          ) {
-            return {
-              available: false,
-              reason:
-                "No application bridge registered."
-            };
-          }
-
-          try {
-            const value = await bridge.snapshot({
-              selectors: selectedSelectors
-            });
-
-            return {
-              available: true,
-              bridgeVersion: bridge.version || null,
-              value
-            };
-          } catch (error) {
-            return {
-              available: true,
-              error:
-                error instanceof Error
-                  ? error.message
-                  : String(error)
-            };
-          }
-        },
-
-        args: [selectors]
-      });
-
-    return sanitizeValue(
-      result?.result || {
-        available: false
-      }
+    const selectors = (pageContext?.selections || []).map(
+      (selection) => selection.selector
     );
+
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+
+      func: async (selectedSelectors) => {
+        const bridge = globalThis.__CONTEXT_CAPSULE_BRIDGE__;
+
+        if (!bridge || typeof bridge.snapshot !== "function") {
+          return {
+            available: false,
+            reason: "No application bridge registered."
+          };
+        }
+
+        try {
+          const value = await bridge.snapshot({
+            selectors: selectedSelectors
+          });
+
+          return {
+            available: true,
+            bridgeVersion: bridge.version || null,
+            value
+          };
+        } catch (error) {
+          return {
+            available: true,
+            error:
+              error instanceof Error
+                ? error.message
+                : String(error)
+          };
+        }
+      },
+
+      args: [selectors]
+    });
+
+    return sanitizeValue(result?.result || { available: false });
   } catch (error) {
     return {
       available: false,
@@ -367,35 +553,17 @@ async function captureAppBridge(tabId, pageContext) {
   }
 }
 
-async function captureCdpContext(
-  tabId,
-  pageContext
-) {
-  const primary =
-    pageContext?.selections?.[0];
-
-  const x = Math.max(
-    0,
-    Math.round(
-      primary?.rect?.x +
-        primary?.rect?.width / 2 || 1
-    )
-  );
-
-  const y = Math.max(
-    0,
-    Math.round(
-      primary?.rect?.y +
-        primary?.rect?.height / 2 || 1
-    )
-  );
-
+async function captureCdpContext(tabId, pageContext, options) {
   const result = {
     layoutMetrics: null,
-    selectedNode: null,
-    computedStyle: null,
-    accessibility: null,
+    selectedNodes: [],
     domSnapshot: null,
+
+    /*
+     * Full-page snapshots run into megabytes on real applications, so they are
+     * opt-in. Selected nodes plus ancestors are the default evidence.
+     */
+    domSnapshotSkipped: null,
     errors: []
   };
 
@@ -410,17 +578,72 @@ async function captureCdpContext(
     );
   }
 
-  try {
-    const located = await cdp(
-      tabId,
-      "DOM.getNodeForLocation",
-      {
-        x,
-        y,
-        includeUserAgentShadowDOM: true,
-        ignorePointerEventsNone: true
-      }
+  /*
+   * Every selection, not just the first one. Group selection was the entire
+   * point of the interaction model.
+   */
+  for (const selection of pageContext?.selections || []) {
+    result.selectedNodes.push(
+      await captureNode(tabId, selection, result.errors)
     );
+  }
+
+  if (options?.fullDomSnapshot) {
+    try {
+      result.domSnapshot = await cdp(
+        tabId,
+        "DOMSnapshot.captureSnapshot",
+        {
+          computedStyles: SNAPSHOT_STYLES,
+          includePaintOrder: true,
+          includeDOMRects: true,
+          includeBlendedBackgroundColors: true,
+          includeTextColorOpacities: true
+        }
+      );
+    } catch (error) {
+      result.errors.push(
+        `DOMSnapshot.captureSnapshot: ${toErrorMessage(error)}`
+      );
+    }
+  } else {
+    result.domSnapshotSkipped =
+      "Full-page DOM snapshot not requested. Enable it in the side " +
+      "panel when whole-document layout is needed.";
+  }
+
+  return result;
+}
+
+async function captureNode(tabId, selection, errors) {
+  const rect = selection?.rect;
+
+  const node = {
+    id: selection?.id || null,
+    selector: selection?.selector || null,
+    describeNode: null,
+    computedStyle: null,
+    matchedStyles: null,
+    accessibility: null,
+    eventListeners: null
+  };
+
+  if (!rect || !rect.width || !rect.height) {
+    errors.push(`Selection ${node.id}: no layout box to probe.`);
+
+    return node;
+  }
+
+  const x = Math.max(0, Math.round(rect.x + rect.width / 2));
+  const y = Math.max(0, Math.round(rect.y + rect.height / 2));
+
+  try {
+    const located = await cdp(tabId, "DOM.getNodeForLocation", {
+      x,
+      y,
+      includeUserAgentShadowDOM: true,
+      ignorePointerEventsNone: true
+    });
 
     let nodeId = located.nodeId;
 
@@ -428,473 +651,426 @@ async function captureCdpContext(
       const pushed = await cdp(
         tabId,
         "DOM.pushNodesByBackendIdsToFrontend",
-        {
-          backendNodeIds: [
-            located.backendNodeId
-          ]
-        }
+        { backendNodeIds: [located.backendNodeId] }
       );
 
       nodeId = pushed.nodeIds?.[0];
     }
 
-    if (nodeId) {
-      result.selectedNode = await cdp(
-        tabId,
-        "DOM.describeNode",
-        {
-          nodeId,
-          depth: 4,
-          pierce: true
-        }
+    if (!nodeId) {
+      errors.push(
+        `Selection ${node.id}: node not resolvable at (${x}, ${y}).`
       );
 
-      result.computedStyle = await cdp(
-        tabId,
-        "CSS.getComputedStyleForNode",
-        {
-          nodeId
-        }
-      );
+      return node;
+    }
 
-      result.accessibility = await cdp(
+    node.describeNode = await cdp(tabId, "DOM.describeNode", {
+      nodeId,
+      depth: 4,
+      pierce: true
+    });
+
+    node.computedStyle = await cdp(
+      tabId,
+      "CSS.getComputedStyleForNode",
+      { nodeId }
+    );
+
+    /* Matched rules carry stylesheet origin — where to actually edit. */
+    try {
+      node.matchedStyles = await cdp(
         tabId,
-        "Accessibility.getPartialAXTree",
-        {
-          nodeId,
-          fetchRelatives: true
-        }
+        "CSS.getMatchedStylesForNode",
+        { nodeId }
+      );
+    } catch (error) {
+      errors.push(
+        `Selection ${node.id} matched styles: ${toErrorMessage(error)}`
+      );
+    }
+
+    node.accessibility = await cdp(
+      tabId,
+      "Accessibility.getPartialAXTree",
+      { nodeId, fetchRelatives: true }
+    );
+
+    try {
+      const resolved = await cdp(tabId, "DOM.resolveNode", {
+        nodeId
+      });
+
+      if (resolved?.object?.objectId) {
+        node.eventListeners = await cdp(
+          tabId,
+          "DOMDebugger.getEventListeners",
+          { objectId: resolved.object.objectId }
+        );
+      }
+    } catch (error) {
+      errors.push(
+        `Selection ${node.id} listeners: ${toErrorMessage(error)}`
       );
     }
   } catch (error) {
-    result.errors.push(
-      `Selected node capture: ${toErrorMessage(error)}`
+    errors.push(`Selection ${node.id}: ${toErrorMessage(error)}`);
+  }
+
+  return node;
+}
+
+async function handleDebuggerEvent(source, method, params) {
+  const tabId = source.tabId;
+
+  const session = await loadSession(tabId);
+
+  if (!session?.armed) {
+    return;
+  }
+
+  const timeMs = wallTimeFor(tabId, params?.timestamp);
+
+  const origin = {
+    sessionId: source.sessionId || null,
+    frameId: params?.frameId || null
+  };
+
+  switch (method) {
+    case "Network.requestWillBeSent": {
+      const existing = entryGet(session.requests, params.requestId);
+
+      /*
+       * A redirect reuses the request ID. Keep the chain instead of silently
+       * overwriting the original request.
+       */
+      if (existing && params.redirectResponse) {
+        existing.redirectChain.push(
+          describeResponse(params.redirectResponse)
+        );
+
+        existing.request.url = redactText(params.request?.url || "");
+
+        touch(tabId);
+
+        return;
+      }
+
+      entrySet(
+        session.requests,
+        params.requestId,
+        {
+          requestId: params.requestId,
+          timeMs,
+          timestamp: new Date(timeMs).toISOString(),
+          origin,
+          type: params.type || null,
+          documentURL: redactText(params.documentURL || null),
+          initiator: sanitizeValue(params.initiator),
+
+          request: {
+            url: redactText(params.request?.url || ""),
+            method: params.request?.method || "GET",
+            headers: redactHeaders(params.request?.headers || {}),
+            postData: redactText(params.request?.postData || null)
+          },
+
+          redirectChain: [],
+          encodedDataLength: null,
+          response: null,
+          failure: null
+        },
+        LIMITS.requests
+      );
+
+      touch(tabId);
+
+      return;
+    }
+
+    case "Network.responseReceived": {
+      const request = entryGet(session.requests, params.requestId);
+
+      if (request) {
+        request.response = describeResponse(params.response);
+
+        touch(tabId);
+      }
+
+      return;
+    }
+
+    case "Network.loadingFinished": {
+      const request = entryGet(session.requests, params.requestId);
+
+      if (request) {
+        request.encodedDataLength =
+          params.encodedDataLength ?? null;
+      }
+
+      await maybeCaptureBody(tabId, session, params, request);
+
+      touch(tabId);
+
+      return;
+    }
+
+    case "Network.loadingFailed": {
+      const request = entryGet(session.requests, params.requestId);
+
+      if (request) {
+        request.failure = {
+          errorText: params.errorText,
+          canceled: params.canceled,
+          blockedReason: params.blockedReason,
+          corsErrorStatus: params.corsErrorStatus
+        };
+
+        touch(tabId);
+      }
+
+      return;
+    }
+
+    case "Network.webSocketFrameSent":
+    case "Network.webSocketFrameReceived":
+      pushEvent(session, {
+        category: "websocket",
+        level: "info",
+        timeMs,
+        timestamp: new Date(timeMs).toISOString(),
+        origin,
+
+        direction:
+          method === "Network.webSocketFrameSent"
+            ? "sent"
+            : "received",
+
+        text: redactText(
+          String(params.response?.payloadData || "").slice(0, 4000)
+        )
+      });
+
+      touch(tabId);
+
+      return;
+
+    case "Runtime.consoleAPICalled":
+      pushEvent(session, {
+        category: "console",
+        level: params.type,
+        timeMs,
+        timestamp: new Date(timeMs).toISOString(),
+        origin,
+
+        text: (params.args || [])
+          .map(serializeRemoteObject)
+          .join(" "),
+
+        stackTrace: sanitizeValue(params.stackTrace || null)
+      });
+
+      touch(tabId);
+
+      return;
+
+    case "Runtime.exceptionThrown":
+      pushEvent(session, {
+        category: "exception",
+        level: "error",
+        timeMs,
+        timestamp: new Date(timeMs).toISOString(),
+        origin,
+
+        text: redactText(
+          params.exceptionDetails?.text || "Unhandled exception"
+        ),
+
+        detail: sanitizeValue(params.exceptionDetails || null)
+      });
+
+      /* Exceptions are the evidence most worth not losing. */
+      await flush(tabId);
+
+      return;
+
+    case "Log.entryAdded":
+      pushEvent(session, {
+        category: "log",
+        level: params.entry?.level || "info",
+        timeMs,
+        timestamp: new Date(timeMs).toISOString(),
+        origin,
+        text: redactText(params.entry?.text || ""),
+        detail: sanitizeValue(params.entry || null)
+      });
+
+      touch(tabId);
+
+      return;
+
+    case "Page.frameNavigated":
+      pushNavigation(session, {
+        url: redactText(params.frame?.url || ""),
+        frameId: params.frame?.id || null,
+        parentFrameId: params.frame?.parentId || null,
+        timeMs,
+        timestamp: new Date(timeMs).toISOString(),
+        kind: "frame-navigated"
+      });
+
+      await flush(tabId);
+
+      return;
+
+    case "Target.attachedToTarget":
+      entrySet(
+        session.targets,
+        params.sessionId,
+        {
+          sessionId: params.sessionId,
+          type: params.targetInfo?.type || null,
+          url: redactText(params.targetInfo?.url || ""),
+          attachedAt: new Date(timeMs).toISOString()
+        },
+        50
+      );
+
+      touch(tabId);
+
+      return;
+
+    default:
+      return;
+  }
+}
+
+function describeResponse(response) {
+  return {
+    url: redactText(response?.url || ""),
+    status: response?.status,
+    statusText: response?.statusText,
+    mimeType: response?.mimeType,
+    headers: redactHeaders(response?.headers || {}),
+    protocol: response?.protocol,
+    remoteIPAddress: response?.remoteIPAddress,
+    fromDiskCache: response?.fromDiskCache,
+    fromServiceWorker: response?.fromServiceWorker,
+    timing: sanitizeValue(response?.timing || null)
+  };
+}
+
+async function maybeCaptureBody(tabId, session, params, request) {
+  if (!request) {
+    return;
+  }
+
+  const mimeType = request.response?.mimeType || "";
+
+  if (!BODY_MIME.test(mimeType)) {
+    return;
+  }
+
+  const size = Number(params.encodedDataLength || 0);
+
+  if (size > MAX_BODY_BYTES) {
+    entrySet(
+      session.responseBodies,
+      params.requestId,
+      {
+        skipped: true,
+        reason:
+          `Body of ${size} bytes exceeds the ` +
+          `${MAX_BODY_BYTES} byte capture limit.`
+      },
+      LIMITS.responseBodies
     );
+
+    return;
   }
 
   try {
-    result.domSnapshot = await cdp(
-      tabId,
-      "DOMSnapshot.captureSnapshot",
+    const body = await cdp(tabId, "Network.getResponseBody", {
+      requestId: params.requestId
+    });
+
+    entrySet(
+      session.responseBodies,
+      params.requestId,
       {
-        computedStyles: [
-          "display",
-          "position",
-          "z-index",
-          "width",
-          "height",
-          "margin-top",
-          "margin-right",
-          "margin-bottom",
-          "margin-left",
-          "padding-top",
-          "padding-right",
-          "padding-bottom",
-          "padding-left",
-          "font-family",
-          "font-size",
-          "font-weight",
-          "line-height",
-          "color",
-          "background-color",
-          "border-radius",
-          "overflow",
-          "opacity",
-          "transform"
-        ],
+        base64Encoded: Boolean(body.base64Encoded),
 
-        includePaintOrder: true,
-        includeDOMRects: true,
-        includeBlendedBackgroundColors: true,
-        includeTextColorOpacities: true
-      }
-    );
-  } catch (error) {
-    result.errors.push(
-      `DOMSnapshot.captureSnapshot: ${toErrorMessage(
-        error
-      )}`
-    );
-  }
-
-  return result;
-}
-
-async function handleDebuggerEvent(
-  tabId,
-  method,
-  params,
-  session
-) {
-  const timeMs =
-    cdpTimeToEpochMs(params?.timestamp) ||
-    Date.now();
-
-  if (method === "Network.requestWillBeSent") {
-    session.requests.set(params.requestId, {
-      requestId: params.requestId,
-      timeMs,
-      timestamp: new Date(timeMs).toISOString(),
-      type: params.type || null,
-      documentURL: params.documentURL || null,
-      initiator: sanitizeValue(
-        params.initiator
-      ),
-
-      request: {
-        url: params.request?.url || "",
-        method:
-          params.request?.method || "GET",
-        headers: redactHeaders(
-          params.request?.headers || {}
-        ),
-        postData: redactText(
-          params.request?.postData || null
-        )
+        body: body.base64Encoded
+          ? "[BINARY BODY OMITTED]"
+          : redactText(body.body)
       },
-
-      response: null,
-      failure: null
-    });
-
-    trimMap(session.requests, 300);
-
-    return;
-  }
-
-  if (method === "Network.responseReceived") {
-    const request = session.requests.get(
-      params.requestId
+      LIMITS.responseBodies
     );
-
-    if (request) {
-      request.response = {
-        url:
-          params.response?.url ||
-          request.request.url,
-
-        status: params.response?.status,
-        statusText:
-          params.response?.statusText,
-        mimeType:
-          params.response?.mimeType,
-
-        headers: redactHeaders(
-          params.response?.headers || {}
-        ),
-
-        protocol:
-          params.response?.protocol,
-
-        remoteIPAddress:
-          params.response?.remoteIPAddress,
-
-        fromDiskCache:
-          params.response?.fromDiskCache,
-
-        fromServiceWorker:
-          params.response?.fromServiceWorker,
-
-        timing: sanitizeValue(
-          params.response?.timing || null
-        )
-      };
-    }
-
-    return;
-  }
-
-  if (method === "Network.loadingFinished") {
-    const request = session.requests.get(
-      params.requestId
-    );
-
-    const mimeType =
-      request?.response?.mimeType || "";
-
-    if (
-      request &&
-      BODY_MIME.test(mimeType) &&
-      Number(
-        params.encodedDataLength || 0
-      ) <= MAX_BODY_BYTES
-    ) {
-      try {
-        const body = await cdp(
-          tabId,
-          "Network.getResponseBody",
-          {
-            requestId: params.requestId
-          }
-        );
-
-        session.responseBodies.set(
-          params.requestId,
-          {
-            base64Encoded:
-              Boolean(body.base64Encoded),
-
-            body: body.base64Encoded
-              ? "[BINARY BODY OMITTED]"
-              : redactText(body.body)
-          }
-        );
-
-        trimMap(
-          session.responseBodies,
-          120
-        );
-      } catch {
-        // Chrome may have evicted the body.
-      }
-    }
-
-    return;
-  }
-
-  if (method === "Network.loadingFailed") {
-    const request = session.requests.get(
-      params.requestId
-    );
-
-    if (request) {
-      request.failure = {
-        errorText: params.errorText,
-        canceled: params.canceled,
-        blockedReason:
-          params.blockedReason,
-        corsErrorStatus:
-          params.corsErrorStatus
-      };
-    }
-
-    return;
-  }
-
-  if (method === "Runtime.consoleAPICalled") {
-    pushEvent(session, {
-      category: "console",
-      level: params.type,
-      timeMs,
-      timestamp: new Date(timeMs).toISOString(),
-
-      text: (params.args || [])
-        .map(serializeRemoteObject)
-        .join(" "),
-
-      stackTrace: sanitizeValue(
-        params.stackTrace || null
-      )
-    });
-
-    return;
-  }
-
-  if (method === "Runtime.exceptionThrown") {
-    pushEvent(session, {
-      category: "exception",
-      level: "error",
-      timeMs,
-      timestamp: new Date(timeMs).toISOString(),
-
-      text:
-        params.exceptionDetails?.text ||
-        "Unhandled exception",
-
-      detail: sanitizeValue(
-        params.exceptionDetails || null
-      )
-    });
-
-    return;
-  }
-
-  if (method === "Log.entryAdded") {
-    pushEvent(session, {
-      category: "log",
-      level:
-        params.entry?.level || "info",
-      timeMs,
-      timestamp: new Date(timeMs).toISOString(),
-      text: params.entry?.text || "",
-      detail: sanitizeValue(
-        params.entry || null
-      )
-    });
+  } catch {
+    /* Chrome evicts bodies aggressively; nothing to recover. */
   }
 }
 
-function pushEvent(session, event) {
-  session.events.push(event);
-
-  if (session.events.length > MAX_EVENTS) {
-    session.events.splice(
-      0,
-      session.events.length - MAX_EVENTS
-    );
-  }
+function cdp(tabId, method, params = undefined) {
+  return chrome.debugger.sendCommand({ tabId }, method, params);
 }
 
-function trimMap(map, max) {
-  while (map.size > max) {
-    const firstKey =
-      map.keys().next().value;
-
-    map.delete(firstKey);
+/**
+ * CDP timestamps are monotonic seconds, not epoch milliseconds. Anchor the
+ * first one seen per tab against wall time and derive the rest from it, so
+ * event ordering stays truthful instead of collapsing to arrival time.
+ */
+export function wallTimeFor(tabId, timestamp, now = Date.now()) {
+  if (
+    typeof timestamp !== "number" ||
+    !Number.isFinite(timestamp) ||
+    timestamp <= 0
+  ) {
+    return now;
   }
-}
 
-function cdp(
-  tabId,
-  method,
-  params = undefined
-) {
-  return chrome.debugger.sendCommand(
-    { tabId },
-    method,
-    params
-  );
+  const monotonicMs = timestamp * 1000;
+
+  let offset = clockOffsets.get(tabId);
+
+  if (offset === undefined) {
+    offset = now - monotonicMs;
+
+    clockOffsets.set(tabId, offset);
+  }
+
+  const wall = monotonicMs + offset;
+
+  /*
+   * Guard against a clock base we misread: never report the future, and never
+   * report something implausibly old.
+   */
+  if (wall > now + 1000 || wall < now - 3_600_000) {
+    return now;
+  }
+
+  return Math.round(wall);
 }
 
 function serializeRemoteObject(object) {
-  if (
-    Object.prototype.hasOwnProperty.call(
-      object || {},
-      "value"
-    )
-  ) {
-    return redactText(
-      stringifySafe(object.value)
-    );
+  if (Object.prototype.hasOwnProperty.call(object || {}, "value")) {
+    return redactText(stringifySafe(object.value));
   }
 
   return redactText(
-    object?.description ||
-      object?.type ||
-      "unknown"
+    object?.description || object?.type || "unknown"
   );
-}
-
-function stringifySafe(value) {
-  if (typeof value === "string") {
-    return value;
-  }
-
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-}
-
-function redactHeaders(headers) {
-  const output = {};
-
-  for (const [key, value] of Object.entries(
-    headers || {}
-  )) {
-    output[key] = SECRET_KEY.test(key)
-      ? "[REDACTED]"
-      : redactText(String(value));
-  }
-
-  return output;
-}
-
-function redactText(value) {
-  if (value == null) {
-    return value;
-  }
-
-  let text = String(value);
-
-  text = text.replace(
-    /Bearer\s+[A-Za-z0-9._~+\/-]+=*/gi,
-    "Bearer [REDACTED]"
-  );
-
-  text = text.replace(
-    /(["']?(?:token|secret|password|api[-_]?key|authorization)["']?\s*[:=]\s*["'])[^"']+(["'])/gi,
-    "$1[REDACTED]$2"
-  );
-
-  text = text.replace(
-    /\b[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\b/g,
-    "[REDACTED_JWT]"
-  );
-
-  return text.slice(0, 500_000);
-}
-
-function sanitizeValue(value, depth = 0) {
-  if (depth > 7) {
-    return "[MAX_DEPTH]";
-  }
-
-  if (
-    value == null ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-  ) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    return redactText(value);
-  }
-
-  if (Array.isArray(value)) {
-    return value
-      .slice(0, 200)
-      .map((item) =>
-        sanitizeValue(item, depth + 1)
-      );
-  }
-
-  if (typeof value === "object") {
-    const output = {};
-
-    for (const [key, item] of Object.entries(
-      value
-    ).slice(0, 200)) {
-      output[key] = SECRET_KEY.test(key)
-        ? "[REDACTED]"
-        : sanitizeValue(
-            item,
-            depth + 1
-          );
-    }
-
-    return output;
-  }
-
-  return String(value);
-}
-
-function cdpTimeToEpochMs(timestamp) {
-  if (typeof timestamp !== "number") {
-    return null;
-  }
-
-  /*
-   * Many CDP timestamps are monotonic rather than Unix
-   * timestamps. For this MVP, receipt time is safer than
-   * pretending the monotonic value is an epoch value.
-   */
-  return Date.now();
 }
 
 function toErrorMessage(error) {
-  return error instanceof Error
-    ? error.message
-    : String(error);
+  return error instanceof Error ? error.message : String(error);
 }
 
 function broadcastStatus(tabId) {
   chrome.runtime
-    .sendMessage({
-      type: "CC_STATUS_CHANGED",
-      tabId
-    })
+    .sendMessage({ type: "CC_STATUS_CHANGED", tabId })
     .catch(() => {});
 }
+
+/* Exported for the test suite; unused by the worker itself. */
+export { describeResponse, entryValues };

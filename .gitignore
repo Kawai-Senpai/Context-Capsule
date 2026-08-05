@@ -6,3 +6,6 @@ Thumbs.db
 # Local capture output and generated native-host manifests
 companion/native-host.manifest.json
 captures/
+
+# Design document — local only, not distributed
+docs/PLAN.md

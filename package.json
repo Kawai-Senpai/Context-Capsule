@@ -1,0 +1,18 @@
+{
+  "name": "context-capsule",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "description": "Point at the bug, ship the evidence. A browser-side context compiler for coding agents.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "icons": "node tools/build-icons.mjs"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  }
+}

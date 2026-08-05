@@ -1,42 +1,77 @@
+import { scanForReview } from "./redact.js";
+
 const HOST_NAME =
   "com.contextcapsule.host";
 
-const frames = [];
+/*
+ * Chrome's native messaging caps a single message from an extension at 64 MiB,
+ * and the plan's own budget caps a whole capsule at 100 MB. Both are enforced
+ * before we start writing, so a capsule never half-lands on disk.
+ */
+const MAX_NATIVE_MESSAGE_BYTES = 48_000_000;
 
-const port = chrome.runtime.connect({
-  name: "context-capsule-panel"
-});
+const MAX_CAPSULE_BYTES = 100_000_000;
+
+const frames = [];
 
 const pending = new Map();
 
 let sequence = 0;
 
-port.onMessage.addListener(
-  (message) => {
+let port = null;
+
+/*
+ * The service worker can be terminated between two clicks, which disconnects
+ * the port. Reconnect lazily and fail in-flight requests loudly rather than
+ * letting them hang until the timeout.
+ */
+function connect() {
+  port = chrome.runtime.connect({
+    name: "context-capsule-panel"
+  });
+
+  port.onMessage.addListener((message) => {
     if (!message.requestId) {
       return;
     }
 
-    const entry =
-      pending.get(message.requestId);
+    const entry = pending.get(message.requestId);
 
     if (!entry) {
       return;
     }
 
-    pending.delete(
-      message.requestId
-    );
+    pending.delete(message.requestId);
 
     if (message.ok) {
       entry.resolve(message.result);
     } else {
+      entry.reject(new Error(message.error));
+    }
+  });
+
+  port.onDisconnect.addListener(() => {
+    port = null;
+
+    for (const entry of pending.values()) {
       entry.reject(
-        new Error(message.error)
+        new Error(
+          "The extension worker restarted. Try that again."
+        )
       );
     }
-  }
-);
+
+    pending.clear();
+  });
+
+  return port;
+}
+
+function activePort() {
+  return port || connect();
+}
+
+connect();
 
 const $ = (selector) =>
   document.querySelector(selector);
@@ -73,6 +108,12 @@ const framesNode =
 
 const exportResult =
   $("#exportResult");
+
+const reviewNode =
+  $("#review");
+
+const fullSnapshot =
+  $("#fullSnapshot");
 
 armButton.addEventListener(
   "click",
@@ -124,7 +165,14 @@ captureButton.addEventListener(
         const rawFrame =
           await request(
             "CAPTURE_FRAME",
-            { intent }
+            {
+              intent,
+
+              options: {
+                fullDomSnapshot:
+                  fullSnapshot.checked
+              }
+            }
           );
 
         const cropped =
@@ -204,6 +252,22 @@ exportButton.addEventListener(
         const capsule =
           await buildCapsule(frames);
 
+        renderReview(capsule);
+
+        /*
+         * If an independent second pass still finds credential-shaped data,
+         * stop and make the user look. Exporting anyway is a decision, not a
+         * default.
+         */
+        if (
+          capsule.review.residual.length &&
+          !confirmResidual(capsule.review.residual)
+        ) {
+          throw new Error(
+            "Export cancelled. Nothing was written."
+          );
+        }
+
         const result =
           await writeCapsuleToNative(
             capsule
@@ -245,6 +309,17 @@ downloadButton.addEventListener(
 
         const capsule =
           await buildCapsule(frames);
+
+        renderReview(capsule);
+
+        if (
+          capsule.review.residual.length &&
+          !confirmResidual(capsule.review.residual)
+        ) {
+          throw new Error(
+            "Download cancelled. Nothing was written."
+          );
+        }
 
         const blob = new Blob(
           [
@@ -309,7 +384,7 @@ function request(type, payload = {}) {
         }
       );
 
-      port.postMessage({
+      activePort().postMessage({
         requestId,
         type,
         ...payload
@@ -747,9 +822,107 @@ async function buildCapsule(
     }
   );
 
+  /*
+   * Evidence is only useful if the agent can tell it was not truncated, so
+   * every file carries a hash, a byte count and its redaction status.
+   */
+  const review = scanForReview(files);
+
+  files.push(
+    textFile(
+      "security/redaction-report.json",
+
+      JSON.stringify(
+        {
+          schemaVersion: "0.1.0",
+          captureId,
+          scannedTextBytes: review.scannedBytes,
+          textFiles: review.textFiles,
+
+          excludedAutomatically: [
+            "authorization and cookie headers",
+            "credential-shaped object keys",
+            "password and payment form values",
+            "binary response bodies"
+          ],
+
+          removed: review.removed,
+
+          residual: review.residual,
+
+          note:
+            "removed[] counts what redaction stripped. residual[] is what " +
+            "an independent second pass still found and must be empty.",
+
+          policy: {
+            responseBodyLimitBytes: 1_000_000,
+            capsuleLimitBytes: MAX_CAPSULE_BYTES,
+            regexRedaction: true,
+            entropyScanning: true,
+            proofOfSafety: false
+          }
+        },
+        null,
+        2
+      )
+    )
+  );
+
+  files.push(
+    textFile(
+      "integrity.json",
+
+      JSON.stringify(
+        {
+          schemaVersion: "0.1.0",
+          captureId,
+          algorithm: "SHA-256",
+          files: await Promise.all(
+            files.map(async (file) => ({
+              path: file.path,
+              encoding: file.encoding,
+              bytes: byteLength(file),
+              sha256: await sha256(file)
+            }))
+          )
+        },
+        null,
+        2
+      )
+    )
+  );
+
+  const totalBytes = files.reduce(
+    (sum, file) => sum + byteLength(file),
+    0
+  );
+
+  if (totalBytes > MAX_CAPSULE_BYTES) {
+    throw new Error(
+      `This capsule is ${formatBytes(totalBytes)}, over the ` +
+        `${formatBytes(MAX_CAPSULE_BYTES)} budget. Remove a frame ` +
+        "or turn off the full-page DOM snapshot."
+    );
+  }
+
+  const oversized = files.find(
+    (file) => byteLength(file) > MAX_NATIVE_MESSAGE_BYTES
+  );
+
+  if (oversized) {
+    throw new Error(
+      `"${oversized.path}" is ${formatBytes(
+        byteLength(oversized)
+      )}, over the native messaging limit. Turn off the ` +
+        "full-page DOM snapshot for this capture."
+    );
+  }
+
   return {
     captureId,
     files,
+    totalBytes,
+    review,
 
     fallback: {
       manifest,
@@ -783,6 +956,141 @@ async function buildCapsule(
       boardDataUrl
     }
   };
+}
+
+function confirmResidual(residual) {
+  const summary = residual
+    .map((item) => `${item.count} × ${item.kind}`)
+    .join("\n");
+
+  return window.confirm(
+    "Redaction may have missed sensitive data:\n\n" +
+      summary +
+      "\n\nExport anyway?"
+  );
+}
+
+function byteLength(file) {
+  return file.encoding === "base64"
+    ? Math.floor((file.data.length * 3) / 4)
+    : new TextEncoder().encode(file.data).length;
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function sha256(file) {
+  const bytes =
+    file.encoding === "base64"
+      ? Uint8Array.from(atob(file.data), (character) =>
+          character.charCodeAt(0)
+        )
+      : new TextEncoder().encode(file.data);
+
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/**
+ * The review screen: what is going out, what was stripped, and what still
+ * needs a human eye. Rendered from the capsule itself, never from a guess.
+ */
+function renderReview(capsule) {
+  reviewNode.textContent = "";
+
+  if (!capsule) {
+    return;
+  }
+
+  const line = (className, text) => {
+    const row = document.createElement("div");
+
+    row.className = `row ${className}`;
+    row.textContent = text;
+
+    reviewNode.appendChild(row);
+  };
+
+  const head = (text) => {
+    const node = document.createElement("div");
+
+    node.className = "head";
+    node.textContent = text;
+
+    reviewNode.appendChild(node);
+  };
+
+  const counts = capsule.fallback.frames.reduce(
+    (total, frame) => ({
+      selections:
+        total.selections +
+        (frame.pageContext.selections?.length || 0),
+      events:
+        total.events + (frame.runtime.events?.length || 0),
+      requests:
+        total.requests + (frame.runtime.requests?.length || 0),
+      bodies:
+        total.bodies +
+        (frame.runtime.requests || []).filter(
+          (request) => request.responseBody
+        ).length
+    }),
+    { selections: 0, events: 0, requests: 0, bodies: 0 }
+  );
+
+  head("Included");
+
+  line(
+    "ok",
+    `${capsule.fallback.frames.length} frames · ` +
+      `${counts.selections} selections`
+  );
+
+  line(
+    "ok",
+    `${counts.events} runtime events · ` +
+      `${counts.requests} requests · ${counts.bodies} bodies`
+  );
+
+  line(
+    "ok",
+    `${capsule.files.length} files · ` +
+      formatBytes(capsule.totalBytes)
+  );
+
+  if (capsule.review.removed.length) {
+    head("Excluded automatically");
+
+    for (const item of capsule.review.removed) {
+      line("gone", `${item.count} × ${item.kind}`);
+    }
+  }
+
+  if (capsule.review.residual.length) {
+    head("Requires review");
+
+    for (const item of capsule.review.residual) {
+      line(
+        "warn",
+        `${item.count} × ${item.kind} in ${item.files[0]}` +
+          (item.files.length > 1
+            ? ` +${item.files.length - 1} more`
+            : "")
+      );
+    }
+  }
 }
 
 function textFile(path, text) {

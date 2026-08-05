@@ -14,6 +14,7 @@
     annotations: [],
     region: null,
     drawing: null,
+    editing: null,
     captureMode: false
   };
 
@@ -100,6 +101,27 @@
         overflow: visible;
       }
 
+      #editor {
+        position: fixed;
+        display: none;
+        pointer-events: auto;
+        min-width: 190px;
+        padding: 8px 10px;
+        border: 0;
+        border-radius: 9px;
+        outline: 2px solid #6f5cff;
+        outline-offset: 1px;
+        resize: none;
+        color: #f7f7fb;
+        background: rgba(14, 13, 23, 0.96);
+        font: 600 13px/1.35 ui-sans-serif, system-ui, sans-serif;
+        box-shadow: 0 10px 34px rgba(0, 0, 0, 0.42);
+      }
+
+      #editor::placeholder {
+        color: rgba(247, 247, 251, 0.45);
+      }
+
       #toast {
         position: fixed;
         left: 50%;
@@ -144,6 +166,13 @@
         <g id="marks"></g>
       </svg>
 
+      <textarea
+        id="editor"
+        rows="2"
+        placeholder="Note, then Enter"
+        spellcheck="false"
+      ></textarea>
+
       <div id="toast"></div>
     </div>
   `;
@@ -164,6 +193,42 @@
 
   const toast =
     shadow.querySelector("#toast");
+
+  const editor =
+    shadow.querySelector("#editor");
+
+  editor.addEventListener(
+    "keydown",
+    (event) => {
+      /*
+       * The editor is inside our shadow root, but the capture-phase document
+       * listeners below would still see these keys.
+       */
+      event.stopPropagation();
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeTextEditor();
+
+        return;
+      }
+
+      if (
+        event.key === "Enter" &&
+        !event.shiftKey
+      ) {
+        event.preventDefault();
+        commitTextEditor();
+      }
+    },
+    true
+  );
+
+  editor.addEventListener("blur", () => {
+    if (state.editing) {
+      commitTextEditor();
+    }
+  });
 
   const STYLE_KEYS = [
     "display",
@@ -262,6 +327,10 @@
       ) {
         state.captureMode = true;
         hoverBox.style.display = "none";
+
+        if (state.editing) {
+          commitTextEditor();
+        }
 
         sendResponse(
           buildCaptureContext(
@@ -382,6 +451,8 @@
     );
 
     hoverBox.style.display = "none";
+
+    closeTextEditor();
   }
 
   function onMouseMove(event) {
@@ -730,66 +801,120 @@
     } else if (
       tool === "text"
     ) {
-      const value = window.prompt(
-        "Annotation text"
-      );
-
-      if (!value) {
-        return;
-      }
-
-      const group = svgNode(
-        "g",
-        {}
-      );
-
-      const background =
-        svgNode("rect", {
-          x,
-          y: y - 24,
-          width: Math.max(
-            80,
-            value.length * 8 + 18
-          ),
-          height: 30,
-          rx: 6,
-          fill: "#111827"
-        });
-
-      const text = svgNode(
-        "text",
-        {
-          x: x + 9,
-          y: y - 4,
-          fill: "white",
-          "font-size": 14,
-          "font-family":
-            "ui-sans-serif, system-ui",
-          "font-weight": 700
-        }
-      );
-
-      text.textContent = value;
-
-      group.append(
-        background,
-        text
-      );
-
-      marks.appendChild(group);
-
-      state.annotations.push({
-        id,
-        tool: "text",
-        x,
-        y,
-        text: value
-      });
+      /*
+       * An inline editor rather than window.prompt(): a native dialog steals
+       * focus, cannot be styled, and on some pages is suppressed entirely.
+       */
+      openTextEditor(id, x, y);
 
       return;
     }
 
     state.drawing = drawing;
+  }
+
+  /*
+   * Inline text annotation editor.
+   *
+   * Enter commits, Shift+Enter adds a line, Escape cancels. The editor lives in
+   * the closed shadow root so page styles and page scripts cannot touch it.
+   */
+  function openTextEditor(id, x, y) {
+    closeTextEditor();
+
+    state.editing = { id, x, y };
+
+    editor.value = "";
+
+    editor.style.left = `${Math.min(
+      x,
+      window.innerWidth - 230
+    )}px`;
+
+    editor.style.top = `${Math.max(8, y - 46)}px`;
+
+    editor.style.display = "block";
+
+    editor.focus();
+  }
+
+  function closeTextEditor() {
+    state.editing = null;
+
+    editor.style.display = "none";
+    editor.value = "";
+  }
+
+  function commitTextEditor() {
+    const pending = state.editing;
+
+    const value = editor.value.trim();
+
+    closeTextEditor();
+
+    if (!pending || !value) {
+      return;
+    }
+
+    drawTextAnnotation(
+      pending.id,
+      pending.x,
+      pending.y,
+      value
+    );
+
+    state.annotations.push({
+      id: pending.id,
+      tool: "text",
+      x: pending.x,
+      y: pending.y,
+      text: value
+    });
+  }
+
+  function drawTextAnnotation(id, x, y, value) {
+    const lines = value.split("\n").slice(0, 6);
+
+    const width = Math.max(
+      86,
+      Math.max(...lines.map((line) => line.length)) * 7.6 + 20
+    );
+
+    const height = lines.length * 18 + 14;
+
+    const group = svgNode("g", {
+      "data-annotation-id": id
+    });
+
+    group.appendChild(
+      svgNode("rect", {
+        x,
+        y: y - height,
+        width,
+        height,
+        rx: 7,
+        fill: "#0e0d17",
+        stroke: "#6f5cff",
+        "stroke-width": 1.5
+      })
+    );
+
+    lines.forEach((line, index) => {
+      const text = svgNode("text", {
+        x: x + 10,
+        y: y - height + 20 + index * 18,
+        fill: "#f7f7fb",
+        "font-size": 13,
+        "font-family": "ui-sans-serif, system-ui",
+        "font-weight": 600
+      });
+
+      text.textContent = line;
+
+      group.appendChild(text);
+    });
+
+    marks.appendChild(group);
   }
 
   function updateDrawing(x, y) {
@@ -924,6 +1049,8 @@
   }
 
   function clearMarkup() {
+    closeTextEditor();
+
     state.selected = [];
     state.activeSelectionIndex = -1;
     state.annotations = [];

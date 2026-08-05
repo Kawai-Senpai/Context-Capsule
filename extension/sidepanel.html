@@ -125,9 +125,10 @@
         </div>
 
         <p class="hint">
-          Shift-click selects multiple components.
-          Arrow keys move through parent,
-          child and siblings.
+          <kbd>Shift</kbd> + click adds components.
+          <kbd>↑</kbd> <kbd>↓</kbd> walk parent and child,
+          <kbd>←</kbd> <kbd>→</kbd> walk siblings.
+          <kbd>Esc</kbd> returns to select.
         </p>
       </section>
 
@@ -184,6 +185,22 @@
           </span>
         </div>
 
+        <label class="toggle">
+          <input
+            id="fullSnapshot"
+            type="checkbox"
+          >
+
+          <span>
+            Include full-page DOM snapshot
+
+            <small>
+              Whole-document layout and paint order.
+              Adds megabytes; off by default.
+            </small>
+          </span>
+        </label>
+
         <button
           id="captureButton"
           class="secondary full"
@@ -206,6 +223,11 @@
             <h3>Export to your agent</h3>
           </div>
         </div>
+
+        <div
+          id="review"
+          class="review"
+        ></div>
 
         <button
           id="exportButton"
