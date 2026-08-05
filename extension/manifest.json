@@ -5,6 +5,7 @@
   "short_name": "Capsule",
   "description": "Point at the bug, ship the evidence. Package visual, DOM, console, network and application context for coding agents.",
   "version": "0.2.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvMWODWGz7mLhJOXZdcSat5t6j2KpTHHiJV5BiOE224EH29B2Rqa6rKCGI9k7kUNsG+2+N9PX69NQFEGgcPwgOiQImUrckrCODDqagouKsQPpjCaxueeUB/a5aYhXv1Ttt+bYGB+uLy2z1FbIb5l4kNx4YcGJiNYxgkq3/Kc5pqZPC8xrqcIAOynQExMp1ypZWu1diNPWq14y79Wk531TEHkYrlBR77KGOkKfHWf8/5w4VGtjcAMETkKuaY6CcXARam7Nrufb4AIf+LKWNpzm4Nwgb1BH/kcS/h8zUFo+vyVMuuKfkU66cRWJl/4G2L66v9NekkY36dRJWyI17jkNQwIDAQAB",
   "permissions": [
     "activeTab",
     "scripting",

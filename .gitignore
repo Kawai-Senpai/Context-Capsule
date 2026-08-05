@@ -9,3 +9,7 @@ captures/
 
 # Design document — local only, not distributed
 docs/PLAN.md
+
+# Signing key — losing this loses update rights; never commit it
+keys/
+dist/

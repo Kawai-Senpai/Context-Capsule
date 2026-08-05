@@ -229,6 +229,45 @@ describe("manifest", () => {
   });
 });
 
+describe("release identity", () => {
+  it("keeps all three versions in sync", () => {
+    const pkg = JSON.parse(read("package.json"));
+
+    const companion = JSON.parse(read("companion/package.json"));
+
+    /*
+     * The store rejects an upload whose version has not increased, and a
+     * companion that disagrees with the extension makes bug reports useless.
+     */
+    expect(manifest.version).toBe(pkg.version);
+    expect(companion.version).toBe(pkg.version);
+    expect(manifest.version).toMatch(/^\d+(\.\d+){0,3}$/);
+  });
+
+  it("pins the extension id so the native host keeps matching", () => {
+    /*
+     * Without "key", an unpacked build's ID comes from its directory path while
+     * a published build gets a store-assigned one — and the host's
+     * allowed_origins, which permits no wildcards, silently stops matching.
+     */
+    expect(manifest.key, "run: node tools/make-key.mjs --write").toBeTruthy();
+
+    expect(() =>
+      Buffer.from(manifest.key, "base64")
+    ).not.toThrow();
+
+    /* An RSA-2048 SubjectPublicKeyInfo is 294 bytes. */
+    expect(Buffer.from(manifest.key, "base64")).toHaveLength(294);
+  });
+
+  it("never commits the private signing key", () => {
+    const ignored = read(".gitignore");
+
+    expect(ignored).toMatch(/^keys\/$/m);
+    expect(ignored).toMatch(/^dist\/$/m);
+  });
+});
+
 describe("worker durability", () => {
   it("keeps no capture state in service-worker globals", () => {
     /*

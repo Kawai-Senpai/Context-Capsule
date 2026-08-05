@@ -10,7 +10,9 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "icons": "node tools/build-icons.mjs"
+    "icons": "node tools/build-icons.mjs",
+    "key": "node tools/make-key.mjs",
+    "package": "node tools/package.mjs"
   },
   "devDependencies": {
     "vitest": "^3.2.4"

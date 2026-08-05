@@ -8,7 +8,7 @@
 
 <br>
 
-[![tests](https://img.shields.io/badge/tests-103%20passing-2AD9C4?style=flat-square&labelColor=0B0A12)](tests)
+[![tests](https://img.shields.io/badge/tests-106%20passing-2AD9C4?style=flat-square&labelColor=0B0A12)](tests)
 [![manifest](https://img.shields.io/badge/chrome-manifest%20v3-7C6BFF?style=flat-square&labelColor=0B0A12)](extension/manifest.json)
 [![agent interface](https://img.shields.io/badge/agents-MCP%20stdio-7C6BFF?style=flat-square&labelColor=0B0A12)](companion/mcp-server.js)
 [![storage](https://img.shields.io/badge/data-local%20only-2AD9C4?style=flat-square&labelColor=0B0A12)](#security)
@@ -179,7 +179,7 @@ redaction report says so in writing. Treat a capsule as sensitive.
 
 ## What works, and what doesn't
 
-**Verified by the test suite** — `npm test`, 103 tests:
+**Verified by the test suite** — `npm test`, 106 tests:
 
 | Area | Covered |
 | --- | --- |
@@ -210,6 +210,79 @@ redaction report says so in writing. Treat a capsule as sensitive.
 
 ---
 
+## Build and package
+
+There is no bundler — the extension ships the sources it was written in. So the
+build is: prove the tests pass, regenerate the icons from the brand geometry,
+check the version numbers agree, and write the artifacts.
+
+```bash
+npm run package            # tests -> icons -> verify -> dist/
+npm run package -- --crx   # also sign a CRX with keys/*.pem
+```
+
+```
+  read manifest ............ ok - v0.2.0
+  version sync ............. ok - all three at 0.2.0
+  pinned extension id ...... ok - nffphcchkkpimeaamogjbpkpjmmfneea
+  tests .................... ok - 106 passing
+  icons .................... ok - regenerated from brand geometry
+  collect extension files .. ok - 13 files
+  referenced files present . ok - 12 references resolved
+  write extension zip ...... ok - 41.6 KB - sha256:9d06d69ae0d6
+  verify zip ............... ok - 13 entries, manifest at root
+  companion tarball ........ ok - context-capsule-companion-0.2.0.tgz
+```
+
+Every gate is fatal — a package that skipped its tests is worse than no package,
+because it looks finished. The zip is **deterministic**: same sources in,
+byte-identical archive out, so "did this upload actually change?" has an answer.
+It is verified by reading the archive back through a different implementation
+than the one that wrote it, confirming `manifest.json` sits at the root — a
+wrapping directory is the most common store rejection.
+
+### The extension ID is pinned, and this matters
+
+An unpacked extension's ID comes from its **directory path**; a published one
+gets a **store-assigned** ID. The native messaging host is pinned to one ID in
+`allowed_origins`, where wildcards are not permitted. So without pinning, the
+host you registered in development silently stops matching in production and the
+panel just reports a disconnected host.
+
+```bash
+npm run key -- --write     # generate keys/, derive the ID, pin it in the manifest
+```
+
+This project's ID is **`nffphcchkkpimeaamogjbpkpjmmfneea`**, identical for
+unpacked loads, the store zip and a signed CRX. Verified against Chrome's own
+packer: the `crx_id` Chrome embeds in the CRX signed header matches
+`sha256(manifest.key)[0..16]` byte for byte.
+
+`keys/context-capsule.pem` signs self-hosted CRXs and proves ownership of the
+listing. It is gitignored — **back it up**, because losing it means losing the
+ability to update a published extension. Pin the key *before* first publish; the
+store binds the ID permanently.
+
+### Distributing
+
+| Target | How | Catch |
+| --- | --- | --- |
+| Development | Load unpacked from `extension/` | Re-run `install-host.mjs` whenever the ID changes |
+| Web Store | Upload `dist/*-extension-*.zip` | Privacy policy mandatory; `debugger` + `nativeMessaging` means slow review |
+| Self-hosted CRX | `npm run package -- --crx` | Chrome on Windows/macOS **refuses** non-store CRX installs without enterprise policy (`ExtensionInstallForcelist`) |
+| Companion | `dist/*-companion-*.tgz` then `node install-host.mjs <id>` | Needs Node on the machine; the launcher hardcodes the current `node` path, so upgrading Node breaks it |
+
+`install-host.mjs` registers per-OS: a `NativeMessagingHosts/*.json` file on
+macOS and Linux, an `HKCU` registry value under
+`Software\Google\Chrome\NativeMessagingHosts` on Windows. Chrome only — Edge and
+Brave need their own paths.
+
+Still out of reach from a repository: signed MSI/MSIX (Windows code-signing
+certificate), notarized macOS app (Apple Developer ID), store listing assets and
+a privacy policy URL. Those need credentials and legal ownership only you have.
+
+---
+
 ## Layout
 
 ```text
@@ -221,13 +294,15 @@ extension/    MV3 extension — side panel, overlay, CDP capture, durable sessio
 companion/    Node native-messaging host + MCP stdio server
 bridge/       Optional in-app SDK for exact render provenance
 brand/        Mark, lockup, banner and the brand rules
-tools/        Icon generator — regenerates extension/icons from the mark geometry
+tools/        Icon generator, extension-ID pinning, packaging pipeline
 tests/        Vitest suite
 ```
 
 ```bash
-npm test          # full suite
-npm run icons     # regenerate icons from brand geometry
+npm test                   # full suite
+npm run icons              # regenerate icons from brand geometry
+npm run key                # show the pinned extension ID
+npm run package            # build and package into dist/
 ```
 
 ---
