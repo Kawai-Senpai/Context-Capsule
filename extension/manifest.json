@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "minimum_chrome_version": "125",
+  "name": "Context Capsule",
+  "description": "Capture exact visual, DOM, console, network, accessibility and application context for coding agents.",
+  "version": "0.1.0",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "sidePanel",
+    "debugger",
+    "nativeMessaging",
+    "downloads"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Open Context Capsule"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  }
+}

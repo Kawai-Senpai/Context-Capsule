@@ -1,0 +1,8 @@
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+
+# Local capture output and generated native-host manifests
+companion/native-host.manifest.json
+captures/

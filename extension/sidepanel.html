@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1"
+    >
+
+    <title>Context Capsule</title>
+
+    <link
+      rel="stylesheet"
+      href="sidepanel.css"
+    >
+  </head>
+
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">
+            AGENT CONTEXT
+          </div>
+
+          <h1>Context Capsule</h1>
+        </div>
+
+        <span
+          id="statusPill"
+          class="status idle"
+        >
+          Idle
+        </span>
+      </header>
+
+      <section class="hero card">
+        <div>
+          <h2>
+            Point at the UI.
+            Capture the evidence.
+          </h2>
+
+          <p id="pageText">
+            Open a web page,
+            then arm capture.
+          </p>
+        </div>
+
+        <button
+          id="armButton"
+          class="primary"
+        >
+          Arm capture
+        </button>
+      </section>
+
+      <section class="card">
+        <div class="sectionHeading">
+          <div>
+            <span class="step">1</span>
+            <h3>Select and mark</h3>
+          </div>
+
+          <button
+            id="clearButton"
+            class="ghost small"
+          >
+            Clear
+          </button>
+        </div>
+
+        <div
+          class="toolGrid"
+          id="toolGrid"
+        >
+          <button
+            data-tool="select"
+            class="tool active"
+          >
+            <b>↖</b>
+            <span>Select</span>
+          </button>
+
+          <button
+            data-tool="region"
+            class="tool"
+          >
+            <b>▱</b>
+            <span>Region</span>
+          </button>
+
+          <button
+            data-tool="box"
+            class="tool"
+          >
+            <b>□</b>
+            <span>Box</span>
+          </button>
+
+          <button
+            data-tool="arrow"
+            class="tool"
+          >
+            <b>→</b>
+            <span>Arrow</span>
+          </button>
+
+          <button
+            data-tool="pen"
+            class="tool"
+          >
+            <b>⌁</b>
+            <span>Pen</span>
+          </button>
+
+          <button
+            data-tool="text"
+            class="tool"
+          >
+            <b>T</b>
+            <span>Text</span>
+          </button>
+        </div>
+
+        <p class="hint">
+          Shift-click selects multiple components.
+          Arrow keys move through parent,
+          child and siblings.
+        </p>
+      </section>
+
+      <section class="card">
+        <div class="sectionHeading">
+          <div>
+            <span class="step">2</span>
+            <h3>Describe the change</h3>
+          </div>
+        </div>
+
+        <label class="field">
+          <span>What is wrong?</span>
+
+          <textarea
+            id="actualInput"
+            rows="3"
+            placeholder="The middle pricing card is shorter and the button no longer aligns with the other cards."
+          ></textarea>
+        </label>
+
+        <label class="field">
+          <span>What should happen?</span>
+
+          <textarea
+            id="expectedInput"
+            rows="3"
+            placeholder="All pricing cards should have equal height and aligned buttons at every desktop breakpoint."
+          ></textarea>
+        </label>
+
+        <label class="field compact">
+          <span>Capture label</span>
+
+          <input
+            id="labelInput"
+            value="Desktop view"
+          >
+        </label>
+      </section>
+
+      <section class="card">
+        <div class="sectionHeading">
+          <div>
+            <span class="step">3</span>
+            <h3>Add frames</h3>
+          </div>
+
+          <span
+            id="frameCount"
+            class="counter"
+          >
+            0
+          </span>
+        </div>
+
+        <button
+          id="captureButton"
+          class="secondary full"
+        >
+          Capture current view
+        </button>
+
+        <div
+          id="frames"
+          class="frames empty"
+        >
+          No frames yet.
+        </div>
+      </section>
+
+      <section class="card exportCard">
+        <div class="sectionHeading">
+          <div>
+            <span class="step">4</span>
+            <h3>Export to your agent</h3>
+          </div>
+        </div>
+
+        <button
+          id="exportButton"
+          class="primary full"
+        >
+          Create local capsule
+        </button>
+
+        <button
+          id="downloadButton"
+          class="ghost full"
+        >
+          Download JSON fallback
+        </button>
+
+        <p
+          id="exportResult"
+          class="result"
+        ></p>
+      </section>
+
+      <footer>
+        <button
+          id="stopButton"
+          class="danger ghost full"
+        >
+          Stop and detach debugger
+        </button>
+      </footer>
+    </main>
+
+    <script
+      type="module"
+      src="sidepanel.js"
+    ></script>
+  </body>
+</html>
