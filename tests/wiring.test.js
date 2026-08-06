@@ -199,6 +199,18 @@ describe("manifest", () => {
     }
   });
 
+  it("grants host access broadly enough to inject from the panel", () => {
+    /*
+     * activeTab is not enough here: it is granted only by a gesture on the
+     * extension itself, and revoked on cross-origin navigation — but injection
+     * is triggered from a side-panel button and has to survive the route
+     * changes the capture flow depends on.
+     */
+    if (/chrome\.scripting\.executeScript/.test(backgroundJs)) {
+      expect(manifest.host_permissions).toContain("<all_urls>");
+    }
+  });
+
   it("ships every file it points at", () => {
     const referenced = [
       manifest.background.service_worker,

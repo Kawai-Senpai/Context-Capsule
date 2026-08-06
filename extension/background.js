@@ -16,6 +16,7 @@ import {
   touch,
   flush,
   flushAll,
+  listSessions,
   pushEvent,
   pushNavigation,
   entryGet,
@@ -95,15 +96,75 @@ chrome.runtime.onSuspend?.addListener(() => {
   void flushAll();
 });
 
+/*
+ * Panel liveness. The overlay swallows clicks on the page, so leaving a tab
+ * armed after the panel is gone makes the page feel broken with no visible
+ * cause and no control left to switch it off. Closing the panel is therefore
+ * treated as "disarm everything"; the port is the only signal Chrome gives us
+ * that a side panel went away.
+ */
+const panelPorts = new Set();
+
+function panelOpen() {
+  return panelPorts.size > 0;
+}
+
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== "context-capsule-panel") {
     return;
   }
 
+  panelPorts.add(port);
+
   port.onMessage.addListener((message) => {
     void handlePanelMessage(message, port);
   });
+
+  port.onDisconnect.addListener(() => {
+    panelPorts.delete(port);
+
+    if (!panelOpen()) {
+      void disarmAll();
+    }
+  });
 });
+
+/**
+ * Tear down every armed tab: stop the overlay, detach the debugger, drop the
+ * session. Best effort per tab — one dead tab must not strand the others.
+ */
+async function disarmAll() {
+  /* Flush first so a session still only in the write-behind cache is seen. */
+  await flushAll().catch(() => {});
+
+  const sessions = (await listSessions().catch(() => [])).filter(
+    (session) => session?.armed
+  );
+
+  await Promise.all(
+    sessions.map(async (session) => {
+      const tabId = session.tabId;
+
+      try {
+        await chrome.tabs.sendMessage(tabId, { type: "CC_STOP" });
+      } catch {
+        /* The tab or content script may already be gone. */
+      }
+
+      if (session.attached) {
+        try {
+          await chrome.debugger.detach({ tabId });
+        } catch {
+          /* Already detached. */
+        }
+      }
+
+      clockOffsets.delete(tabId);
+
+      await deleteSession(tabId).catch(() => {});
+    })
+  );
+}
 
 chrome.debugger.onEvent.addListener((source, method, params) => {
   if (!source.tabId) {
@@ -143,11 +204,51 @@ chrome.debugger.onDetach.addListener((source, reason) => {
  * script alive; a real document load does not. Re-inject and re-arm so the
  * overlay does not silently disappear mid-capture.
  */
+/*
+ * Switching tabs used to leave the panel describing the tab you left, with no
+ * way to notice except that capture silently did nothing. The panel always
+ * describes the active tab, so every change of active tab is a status change.
+ */
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  void (async () => {
+    await autoArm(tabId);
+
+    broadcastStatus(tabId);
+  })();
+});
+
+chrome.windows.onFocusChanged.addListener((windowId) => {
+  if (windowId === chrome.windows.WINDOW_ID_NONE) {
+    return;
+  }
+
+  void (async () => {
+    const tab = await getActiveTab().catch(() => null);
+
+    if (tab) {
+      await autoArm(tab.id);
+
+      broadcastStatus(tab.id);
+    }
+  })();
+});
+
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   void (async () => {
     const session = await loadSession(tabId);
 
     if (!session?.armed) {
+      /*
+       * Not armed, but the page still changed under the panel — refresh it so
+       * the header never describes a page that is no longer there, and pick up
+       * a newly loaded page if auto-arm is on.
+       */
+      if (changeInfo.status === "complete") {
+        await autoArm(tabId);
+
+        broadcastStatus(tabId);
+      }
+
       return;
     }
 
@@ -165,6 +266,19 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
     }
 
     if (changeInfo.status !== "complete") {
+      return;
+    }
+
+    /*
+     * Armed, but the panel is gone — a session that outlived its panel, e.g.
+     * because the worker restarted. Re-injecting here would resurrect the
+     * overlay on a page with no way to switch it off.
+     */
+    if (!panelOpen()) {
+      await disarmAll();
+
+      broadcastStatus(tabId);
+
       return;
     }
 
@@ -214,6 +328,21 @@ async function handlePanelMessage(message, port) {
       case "STOP":
         result = await stopActiveTab();
         break;
+
+      case "SET_AUTO_ARM": {
+        await chrome.storage.local.set({
+          [AUTO_ARM_KEY]: Boolean(message.enabled)
+        });
+
+        if (message.enabled) {
+          const tab = await getActiveTab();
+
+          await autoArm(tab.id);
+        }
+
+        result = await getStatus();
+        break;
+      }
 
       case "SET_TOOL":
         result = await sendToActiveTab({
@@ -273,6 +402,14 @@ async function getStatus() {
     armed: Boolean(session?.armed),
     attached: Boolean(session?.attached),
 
+    autoArm: await autoArmEnabled(),
+
+    /*
+     * Stated explicitly so the panel can explain an inactive step instead of
+     * leaving the user to guess why nothing happens on a chrome:// page.
+     */
+    capturable: isCapturable(tab.url),
+
     armedAt: session?.startedAt
       ? new Date(session.startedAt).toISOString()
       : null,
@@ -300,8 +437,67 @@ async function injectContentScript(tabId) {
 
 async function armActiveTab() {
   const tab = await getActiveTab();
-  const tabId = tab.id;
 
+  return armTab(tab.id);
+}
+
+/*
+ * Pages no extension may touch. Attempting them throws a raw Chrome error that
+ * reads like a bug in this tool, so auto-arm skips them and the panel says why.
+ */
+const UNCAPTURABLE = /^(chrome|edge|about|devtools|view-source|chrome-extension):|^https:\/\/chromewebstore\.google\.com|^https:\/\/chrome\.google\.com\/webstore/;
+
+export function isCapturable(url) {
+  return Boolean(url) && !UNCAPTURABLE.test(url);
+}
+
+const AUTO_ARM_KEY = "cc.autoArm";
+
+async function autoArmEnabled() {
+  const stored = await chrome.storage.local.get(AUTO_ARM_KEY);
+
+  /* On by default: arming manually every time was the top confusion report. */
+  return stored?.[AUTO_ARM_KEY] !== false;
+}
+
+/**
+ * Arm a tab without being asked, when the panel is open and the tab can
+ * actually be captured. Failures are deliberately silent — an automatic action
+ * the user did not request must never interrupt them with an error.
+ */
+async function autoArm(tabId) {
+  try {
+    /*
+     * No panel, no arming. Otherwise switching tabs with the panel closed
+     * silently arms the overlay on a page the user never pointed the tool at.
+     */
+    if (!panelOpen()) {
+      return;
+    }
+
+    if (!(await autoArmEnabled())) {
+      return;
+    }
+
+    const session = await loadSession(tabId);
+
+    if (session?.armed) {
+      return;
+    }
+
+    const tab = await chrome.tabs.get(tabId);
+
+    if (!isCapturable(tab.url)) {
+      return;
+    }
+
+    await armTab(tabId);
+  } catch {
+    /* Auto-arm is best effort; the manual button reports real errors. */
+  }
+}
+
+async function armTab(tabId) {
   let session = await loadSession(tabId);
 
   if (!session) {

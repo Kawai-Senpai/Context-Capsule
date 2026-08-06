@@ -16,6 +16,40 @@ beforeAll(async () => {
   background = await import("../extension/background.js");
 });
 
+describe("isCapturable", () => {
+  /*
+   * Auto-arm fires on tabs the user never chose, so it has to know which pages
+   * Chrome forbids. Attempting one throws a raw Chrome error that reads like a
+   * bug in this extension rather than a browser rule.
+   */
+  it.each([
+    "http://localhost:3000/",
+    "https://example.com/app",
+    "file:///C:/tmp/page.html"
+  ])("allows %s", (url) => {
+    expect(background.isCapturable(url)).toBe(true);
+  });
+
+  it.each([
+    "chrome://extensions",
+    "chrome://newtab/",
+    "edge://settings",
+    "about:blank",
+    "devtools://devtools/bundled/inspector.html",
+    "view-source:https://example.com",
+    "chrome-extension://abc/page.html",
+    "https://chromewebstore.google.com/detail/x",
+    "https://chrome.google.com/webstore/detail/x"
+  ])("refuses %s", (url) => {
+    expect(background.isCapturable(url)).toBe(false);
+  });
+
+  it("treats a missing url as not capturable", () => {
+    expect(background.isCapturable(undefined)).toBe(false);
+    expect(background.isCapturable("")).toBe(false);
+  });
+});
+
 describe("wallTimeFor", () => {
   it("maps monotonic CDP seconds onto wall time", () => {
     const now = 1_700_000_000_000;

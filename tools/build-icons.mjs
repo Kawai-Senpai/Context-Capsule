@@ -23,13 +23,8 @@ const hex = (h) => [
   parseInt(h.slice(5, 7), 16)
 ];
 
-const FIELD_A = hex("#7C6BFF");
-const FIELD_B = hex("#4B3BD8");
-const PAPER = hex("#F7F7FB");
-const TEAL = hex("#2AD9C4");
-const INK = hex("#0E0D17");
-
-const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+const YELLOW = hex("#FFE047");
+const INK = hex("#0A0A0A");
 
 const over = (dst, src, alpha) =>
   dst.map((v, i) => v * (1 - alpha) + src[i] * alpha);
@@ -46,63 +41,49 @@ function sdRoundRect(px, py, cx, cy, hw, hh, r) {
   );
 }
 
-function sdSegment(px, py, ax, ay, bx, by) {
-  const pax = px - ax;
-  const pay = py - ay;
-  const bax = bx - ax;
-  const bay = by - ay;
 
-  const h = Math.min(
-    1,
-    Math.max(0, (pax * bax + pay * bay) / (bax * bax + bay * bay))
-  );
-
-  return Math.hypot(pax - bax * h, pay - bay * h);
-}
-
-function rotate(px, py, cx, cy, deg) {
-  const a = (deg * Math.PI) / 180;
-  const dx = px - cx;
-  const dy = py - cy;
-
-  return [
-    cx + dx * Math.cos(a) - dy * Math.sin(a),
-    cy + dx * Math.sin(a) + dy * Math.cos(a)
-  ];
-}
-
-/** Colour + coverage at a design-space point. Returns [r,g,b,a]. */
+/**
+ * Colour + coverage at a design-space point. Returns [r,g,b,a].
+ *
+ * The mark is a solid yellow tile carrying a black disc with a wedge taken out
+ * of it: a capsule with its contents extracted, pointing at what it took. Two
+ * flat colours and hard edges, so it survives being 16 pixels wide in a toolbar.
+ */
 function sample(x, y) {
-  // Field
-  const field = sdRoundRect(x, y, 64, 64, 64, 64, 30);
+  // Field — an almost-square tile, matching the panel's hard-edged cards.
+  const field = sdRoundRect(x, y, 64, 64, 64, 64, 10);
 
   if (field > 0.75) {
     return [0, 0, 0, 0];
   }
 
-  let rgb = mix(FIELD_A, FIELD_B, (x + y) / 256);
-  let alpha = clampCoverage(-field);
+  let rgb = YELLOW;
+  const alpha = clampCoverage(-field);
 
-  // Capsule ring, rotated -45deg about centre
-  const [rx, ry] = rotate(x, y, 64, 64, 45);
+  // Disc
+  const disc = Math.hypot(x - 64, y - 64) - 41;
 
-  const ring = Math.abs(
-    sdRoundRect(rx, ry, 64, 64, 34, 18, 18)
-  ) - 4.5;
+  /*
+   * The bite. Binary rather than a signed distance, because the wedge apex is
+   * exactly at the centre where an SDF degenerates; 4x4 supersampling carries
+   * the antialiasing.
+   */
+  let angle = (Math.atan2(y - 64, x - 64) * 180) / Math.PI;
 
-  rgb = over(rgb, PAPER, clampCoverage(-ring));
+  if (angle < 0) {
+    angle += 360;
+  }
 
-  // Seam
-  const seam =
-    sdSegment(rx, ry, 64, 46, 64, 82) - 2.5;
+  const bitten = angle > 118 && angle < 192;
 
-  rgb = over(rgb, PAPER, clampCoverage(-seam) * 0.55);
+  if (!bitten) {
+    rgb = over(rgb, INK, clampCoverage(-disc));
+  }
 
-  // Reticle
+  // Reticle — the point being made.
   const dot = Math.hypot(x - 64, y - 64) - 11;
 
-  rgb = over(rgb, INK, clampCoverage(-(Math.abs(dot) - 1.75)) * 0.35);
-  rgb = over(rgb, TEAL, clampCoverage(-dot));
+  rgb = over(rgb, YELLOW, clampCoverage(-dot));
 
   return [...rgb, alpha];
 }

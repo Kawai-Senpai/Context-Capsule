@@ -1,69 +1,91 @@
 /*
  * Context Capsule — design tokens.
  *
- * The product is a forensic instrument, so the surface is dark, dense and
- * quiet: evidence should be the only thing that shouts. Violet is the tool,
- * teal is the confirmed fact, amber is the region you drew, coral is your
- * annotation. Those four meanings never swap.
+ * Editorial brutalism: paper white, heavy black display type, one loud yellow.
+ * The panel sits beside the app you are debugging, so it does not try to blend
+ * in — it reads like a printed worksheet with four numbered steps.
+ *
+ * Colour still carries fixed meaning and the meanings never swap:
+ *   yellow  the thing to press next
+ *   black   structure, primary action
+ *   blue    a tool you are holding
+ *   red     your annotation, and destructive actions
+ *   green   a confirmed fact
  */
 
 :root {
   /* Field */
-  --ink-900: #0b0a12;
-  --ink-800: #12101f;
-  --ink-700: #171331;
-  --ink-600: #1e1a3d;
-  --line: rgba(247, 247, 251, 0.09);
-  --line-strong: rgba(247, 247, 251, 0.16);
+  --paper: #ffffff;
+  --paper-2: #f4f2ed;
+  --paper-3: #e8e5dd;
+  --ink: #0a0a0a;
+  --ink-soft: #3d3d3d;
+  --ink-mute: #7a7873;
+  --line: #0a0a0a;
+  --line-soft: #d8d5cc;
 
-  /* Type */
-  --paper: #f7f7fb;
-  --paper-dim: #b8b6cd;
-  --paper-mute: #8b8aa6;
+  /*
+   * Fixed anchors. --ink and --paper swap in dark mode, but the yellow, the
+   * red and the black tape band do not — so anything sitting on one of those
+   * needs a colour that never inverts. Using --ink there is what put white
+   * type on a yellow block.
+   */
+  --always-ink: #0a0a0a;
+  --always-paper: #ffffff;
 
   /* Meaning */
-  --violet: #7c6bff;
-  --violet-deep: #4b3bd8;
-  --violet-soft: rgba(124, 107, 255, 0.14);
-  --teal: #2ad9c4;
-  --teal-soft: rgba(42, 217, 196, 0.14);
-  --amber: #ffb454;
-  --amber-soft: rgba(255, 180, 84, 0.14);
-  --coral: #ff5c7a;
-  --coral-soft: rgba(255, 92, 122, 0.14);
+  --yellow: #ffe047;
+  --yellow-deep: #f0c800;
+  --blue: #2f6bff;
+  --blue-soft: #dde6ff;
+  --red: #ff4d3d;
+  --red-soft: #ffe2df;
+  --green: #1faa5f;
+  --green-soft: #d8f5e4;
 
-  /* Form */
-  --r-sm: 8px;
-  --r-md: 11px;
-  --r-lg: 15px;
+  /* Form — hard edges. Roundness is reserved for pills and the mark. */
+  --r-sm: 0px;
+  --r-md: 0px;
+  --r-lg: 0px;
   --r-pill: 999px;
+
+  --border: 2px solid var(--ink);
+  --border-hair: 1px solid var(--line-soft);
 
   --gap-1: 6px;
   --gap-2: 10px;
   --gap-3: 14px;
   --gap-4: 20px;
 
-  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI",
-    Roboto, sans-serif;
+  --sans: "Archivo", "Helvetica Neue", Inter, ui-sans-serif, system-ui,
+    -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-2: 0 10px 30px rgba(0, 0, 0, 0.38);
-  --ring: 0 0 0 3px rgba(124, 107, 255, 0.35);
+  /* Offset shadow, not blur — the reference stacks flat planes. */
+  --shadow-1: 3px 3px 0 var(--ink);
+  --shadow-2: 5px 5px 0 var(--ink);
+  --ring: 0 0 0 3px var(--yellow);
 
   --ease: cubic-bezier(0.2, 0.8, 0.25, 1);
 }
 
 /*
- * The panel is dark by design — it sits beside whatever the user is debugging
- * and must not compete with it. Light mode only softens the field so the panel
- * does not glare next to a white page.
+ * Dark mode inverts the field but keeps the yellow, because the yellow is the
+ * "press this next" signal and must stay the loudest thing on screen either way.
  */
-@media (prefers-color-scheme: light) {
+@media (prefers-color-scheme: dark) {
   :root {
-    --ink-900: #14121f;
-    --ink-800: #1b1830;
-    --ink-700: #221d43;
-    --ink-600: #2a2450;
+    --paper: #0e0e0e;
+    --paper-2: #171717;
+    --paper-3: #212121;
+    --ink: #f6f4ee;
+    --ink-soft: #c6c3ba;
+    --ink-mute: #8a8781;
+    --line: #f6f4ee;
+    --line-soft: #333230;
+
+    --blue-soft: #16224a;
+    --red-soft: #3a1a16;
+    --green-soft: #10301f;
   }
 }

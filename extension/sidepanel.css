@@ -1,9 +1,10 @@
 @import url("tokens.css");
 
 /*
- * The panel is a vertical instrument: status at the top, four numbered steps
- * below, export at the bottom. Nothing collapses or hides, because a user who
- * is mid-bug should never have to hunt for a control.
+ * The panel is a printed worksheet: a masthead, a ribbon, then four numbered
+ * steps you work down in order. Nothing collapses or hides, because a user who
+ * is mid-bug should never have to hunt for a control — but steps that are not
+ * reachable yet are locked, so the order is visible rather than implied.
  */
 
 * {
@@ -17,17 +18,11 @@ body {
 }
 
 body {
-  color: var(--paper);
-  background:
-    radial-gradient(
-      120% 60% at 50% 0%,
-      var(--ink-700) 0%,
-      var(--ink-900) 60%
-    ),
-    var(--ink-900);
+  color: var(--ink);
+  background: var(--paper);
   font-family: var(--sans);
-  font-size: 13.5px;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 1.45;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -39,62 +34,69 @@ body {
   padding: var(--gap-3) var(--gap-3) var(--gap-4);
 }
 
-/* ---------------------------------------------------------------- topbar */
+/* --------------------------------------------------------------- masthead */
 
 .topbar {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--gap-2);
-  padding-bottom: var(--gap-1);
+  padding-bottom: var(--gap-2);
+  border-bottom: var(--border);
 }
 
+/*
+ * Display type is the identity here. It goes as large as a 360px panel allows
+ * and clamps down rather than wrapping into an unreadable stack.
+ */
 .topbar h1 {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 2px 0 0;
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: -0.35px;
+  gap: 7px;
+  margin: 1px 0 0;
+  font-size: clamp(19px, 7.4vw, 27px);
+  font-weight: 900;
+  letter-spacing: -0.045em;
+  line-height: 0.92;
+  text-transform: uppercase;
 }
 
-/* The mark, drawn in CSS so the panel needs no image request. */
+/*
+ * The mark. Drawn from the packaged icon rather than reconstructed in CSS: the
+ * icon is generated from the brand geometry, so this cannot drift away from it,
+ * and it carries its own yellow tile — a CSS disc went invisible against the
+ * dark-mode background.
+ */
 .topbar h1::before {
   content: "";
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-  background:
-    radial-gradient(
-      circle at 50% 50%,
-      var(--teal) 0 3.2px,
-      transparent 3.4px
-    ),
-    linear-gradient(135deg, var(--violet), var(--violet-deep));
-  box-shadow: var(--shadow-1);
+  flex: none;
+  width: 20px;
+  height: 20px;
+  background: url("icons/icon-48.png") center / contain no-repeat;
 }
 
 .eyebrow {
-  color: var(--violet);
+  color: var(--ink-mute);
   font-family: var(--mono);
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 1.4px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
 }
 
 .status {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   flex: none;
-  padding: 4px 10px 4px 8px;
-  border: 1px solid var(--line-strong);
+  padding: 3px 9px 3px 7px;
+  border: var(--border);
   border-radius: var(--r-pill);
+  background: var(--paper-2);
   font-family: var(--mono);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -108,41 +110,73 @@ body {
 }
 
 .status.idle {
-  color: var(--paper-mute);
+  color: var(--ink-mute);
 }
 
 .status.armed {
-  color: var(--teal);
-  border-color: rgba(42, 217, 196, 0.4);
-  background: var(--teal-soft);
+  color: var(--always-ink);
+  background: var(--yellow);
 }
 
 /* A recording indicator has one job: be impossible to miss. */
 .status.armed::before {
-  animation: pulse 1.6s var(--ease) infinite;
+  background: var(--red);
+  animation: pulse 1.4s var(--ease) infinite;
 }
 
 .status.error {
-  color: var(--coral);
-  border-color: rgba(255, 92, 122, 0.4);
-  background: var(--coral-soft);
+  color: var(--always-paper);
+  background: var(--red);
 }
 
 @keyframes pulse {
   0%,
   100% {
     opacity: 1;
-    box-shadow: 0 0 0 0 rgba(42, 217, 196, 0.55);
   }
 
-  70% {
-    opacity: 0.75;
-    box-shadow: 0 0 0 6px rgba(42, 217, 196, 0);
+  55% {
+    opacity: 0.15;
+  }
+}
+
+/* ----------------------------------------------------------------- ribbon */
+
+/*
+ * The tape strip from the brand: a hard black band that separates the masthead
+ * from the work. Purely decorative, so it carries no state and needs no script.
+ */
+.ribbon {
+  display: flex;
+  overflow: hidden;
+  margin: calc(-1 * var(--gap-1)) 0;
+  padding: 5px 0;
+  background: var(--always-ink);
+  transform: rotate(-1.2deg);
+}
+
+.ribbon span {
+  flex: none;
+  padding-right: 14px;
+  color: var(--yellow);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  animation: slide 18s linear infinite;
+}
+
+@keyframes slide {
+  to {
+    transform: translateX(-100%);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .status.armed::before {
+  .status.armed::before,
+  .ribbon span {
     animation: none;
   }
 }
@@ -154,61 +188,55 @@ body {
   flex-direction: column;
   gap: var(--gap-2);
   padding: var(--gap-3);
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  background:
-    linear-gradient(
-      180deg,
-      rgba(247, 247, 251, 0.045),
-      rgba(247, 247, 251, 0.015)
-    );
+  border: var(--border);
+  background: var(--paper);
   box-shadow: var(--shadow-1);
 }
 
 .hero {
-  position: relative;
-  overflow: hidden;
-  border-color: rgba(124, 107, 255, 0.28);
-  background:
-    linear-gradient(
-      135deg,
-      rgba(124, 107, 255, 0.16),
-      rgba(75, 59, 216, 0.06) 60%,
-      transparent
-    );
-}
-
-/* Faint grid, so the hero reads as a surface being inspected. */
-.hero::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(var(--line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--line) 1px, transparent 1px);
-  background-size: 22px 22px;
-  opacity: 0.5;
-  pointer-events: none;
-}
-
-.hero > * {
-  position: relative;
-  z-index: 1;
+  gap: var(--gap-2);
+  color: var(--always-ink);
+  background: var(--yellow);
+  box-shadow: var(--shadow-2);
 }
 
 .hero h2 {
-  margin: 0 0 4px;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.2px;
+  margin: 0 0 3px;
+  color: var(--always-ink);
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
 .hero p {
   margin: 0;
-  color: var(--paper-dim);
+  color: rgba(10, 10, 10, 0.72);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10.5px;
   word-break: break-word;
+}
+
+/*
+ * Buttons sitting on the yellow block cannot use the theme ink either, or the
+ * arm button turns pale-on-yellow in dark mode. Black on yellow, both themes.
+ */
+.hero button {
+  border-color: var(--always-ink);
+  color: var(--always-ink);
+  background: transparent;
+  box-shadow: 3px 3px 0 var(--always-ink);
+}
+
+.hero button.primary {
+  color: var(--yellow);
+  background: var(--always-ink);
+}
+
+.hero button:not(:disabled):hover {
+  color: var(--yellow);
+  background: var(--always-ink);
 }
 
 .sectionHeading {
@@ -216,6 +244,8 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: var(--gap-2);
+  padding-bottom: var(--gap-1);
+  border-bottom: var(--border-hair);
 }
 
 .sectionHeading > div {
@@ -226,31 +256,33 @@ body {
 
 .sectionHeading h3 {
   margin: 0;
-  font-size: 13px;
-  font-weight: 650;
-  letter-spacing: -0.1px;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: -0.025em;
+  text-transform: uppercase;
 }
 
+/* A hard numbered chip, so the order of the steps is a fact, not a hint. */
 .step {
   display: grid;
   place-items: center;
-  width: 18px;
-  height: 18px;
-  border: 1px solid rgba(124, 107, 255, 0.45);
-  border-radius: 6px;
-  color: var(--violet);
-  background: var(--violet-soft);
+  flex: none;
+  width: 21px;
+  height: 21px;
+  border: var(--border);
+  color: var(--paper);
+  background: var(--ink);
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
 }
 
 .counter {
-  min-width: 22px;
+  min-width: 24px;
   padding: 2px 7px;
-  border-radius: var(--r-pill);
-  color: var(--teal);
-  background: var(--teal-soft);
+  border: var(--border);
+  color: var(--ink);
+  background: var(--green-soft);
   font-family: var(--mono);
   font-size: 11px;
   font-weight: 700;
@@ -259,31 +291,78 @@ body {
 
 .hint {
   margin: 0;
-  color: var(--paper-mute);
+  color: var(--ink-mute);
+  font-size: 11px;
+}
+
+.hint b {
+  color: var(--ink);
+}
+
+/*
+ * Steps run in order. A locked card is dimmed rather than hidden so the whole
+ * flow stays visible and it is obvious that the step exists but is not reachable
+ * yet — the controls inside are disabled by the panel script.
+ */
+.card.locked {
+  box-shadow: none;
+  border-style: dashed;
+  opacity: 0.4;
+}
+
+.card.locked .step {
+  color: var(--ink);
+  background: transparent;
+  border-style: dashed;
+}
+
+/*
+ * The single line that always answers "what do I press next". Every confusion
+ * report about this panel was really a missing answer to that question.
+ */
+.nextStep {
+  margin: 0;
+  padding: 8px var(--gap-2);
+  border: var(--border);
+  background: var(--yellow);
+  color: var(--always-ink);
   font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.nextStep::before {
+  content: "▸ ";
+  font-weight: 900;
+}
+
+.heroHint {
+  margin-top: calc(-1 * var(--gap-2));
 }
 
 .hint kbd {
   padding: 1px 5px;
-  border: 1px solid var(--line-strong);
-  border-radius: 5px;
-  background: rgba(247, 247, 251, 0.06);
+  border: 1px solid var(--line-soft);
+  color: var(--ink);
+  background: var(--paper-2);
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 10px;
 }
 
 /* --------------------------------------------------------------- buttons */
 
 button {
   font-family: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
   cursor: pointer;
   transition:
-    transform 0.12s var(--ease),
-    background 0.16s var(--ease),
-    border-color 0.16s var(--ease),
-    opacity 0.16s var(--ease);
+    transform 0.1s var(--ease),
+    box-shadow 0.1s var(--ease),
+    background 0.14s var(--ease),
+    opacity 0.14s var(--ease);
 }
 
 button:focus-visible {
@@ -292,75 +371,68 @@ button:focus-visible {
 }
 
 button:disabled {
-  opacity: 0.42;
+  opacity: 0.38;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
+/* Press moves the plane onto its own shadow. */
 button:not(:disabled):active {
-  transform: translateY(1px);
+  transform: translate(2px, 2px);
+  box-shadow: none;
 }
 
 .primary,
 .secondary,
 .ghost {
-  padding: 9px 14px;
-  border: 1px solid transparent;
-  border-radius: var(--r-md);
-  color: var(--paper);
+  padding: 10px 14px;
+  border: var(--border);
+  color: var(--ink);
+  background: var(--paper);
+  box-shadow: var(--shadow-1);
 }
 
 .primary {
-  border-color: rgba(124, 107, 255, 0.5);
-  background: linear-gradient(
-    135deg,
-    var(--violet),
-    var(--violet-deep)
-  );
-  box-shadow:
-    var(--shadow-1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  color: var(--paper);
+  background: var(--ink);
 }
 
 .primary:not(:disabled):hover {
-  background: linear-gradient(135deg, #8b7bff, #5546e6);
+  color: var(--always-ink);
+  background: var(--yellow);
 }
 
 .secondary {
-  border-color: rgba(42, 217, 196, 0.38);
-  color: var(--teal);
-  background: var(--teal-soft);
+  background: var(--paper-2);
 }
 
 .secondary:not(:disabled):hover {
-  background: rgba(42, 217, 196, 0.22);
+  background: var(--yellow);
 }
 
 .ghost {
-  border-color: var(--line-strong);
-  color: var(--paper-dim);
-  background: rgba(247, 247, 251, 0.04);
+  box-shadow: none;
+  color: var(--ink-soft);
+  background: transparent;
 }
 
 .ghost:not(:disabled):hover {
-  border-color: var(--line-strong);
-  color: var(--paper);
-  background: rgba(247, 247, 251, 0.09);
+  color: var(--ink);
+  background: var(--paper-2);
 }
 
 .ghost.small {
-  padding: 5px 10px;
-  border-radius: var(--r-sm);
-  font-size: 11px;
+  padding: 4px 9px;
+  font-size: 10px;
 }
 
 .danger.ghost {
-  color: var(--coral);
-  border-color: rgba(255, 92, 122, 0.3);
+  color: var(--red);
 }
 
 .danger.ghost:not(:disabled):hover {
-  color: var(--coral);
-  background: var(--coral-soft);
+  color: var(--ink);
+  background: var(--red-soft);
 }
 
 .full {
@@ -372,19 +444,34 @@ button:not(:disabled):active {
 .toolGrid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: var(--gap-1);
+  gap: 0;
+  border: var(--border);
 }
 
+/*
+ * One shared grid of cells rather than six floating buttons: collapsing the
+ * gaps makes the toolbar read as a single instrument.
+ */
 .tool {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   padding: 9px 4px 7px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  color: var(--paper-dim);
-  background: rgba(247, 247, 251, 0.03);
+  border: 0;
+  border-right: var(--border-hair);
+  border-bottom: var(--border-hair);
+  box-shadow: none;
+  color: var(--ink-soft);
+  background: var(--paper);
+}
+
+.tool:nth-child(3n) {
+  border-right: 0;
+}
+
+.tool:nth-last-child(-n + 3) {
+  border-bottom: 0;
 }
 
 .tool b {
@@ -393,21 +480,21 @@ button:not(:disabled):active {
 }
 
 .tool span {
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.1px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
-.tool:hover {
-  color: var(--paper);
-  background: rgba(247, 247, 251, 0.07);
+.tool:not(:disabled):hover {
+  color: var(--ink);
+  background: var(--paper-2);
 }
 
 .tool.active {
-  color: var(--paper);
-  border-color: rgba(124, 107, 255, 0.55);
-  background: var(--violet-soft);
-  box-shadow: inset 0 0 0 1px rgba(124, 107, 255, 0.2);
+  color: var(--ink);
+  background: var(--blue-soft);
+  box-shadow: inset 0 -3px 0 var(--blue);
 }
 
 /*
@@ -415,16 +502,17 @@ button:not(:disabled):active {
  * agree about what each thing means.
  */
 .tool[data-tool="region"].active {
-  border-color: rgba(255, 180, 84, 0.55);
-  background: var(--amber-soft);
+  color: var(--always-ink);
+  background: var(--yellow);
+  box-shadow: inset 0 -3px 0 var(--yellow-deep);
 }
 
 .tool[data-tool="box"].active,
 .tool[data-tool="arrow"].active,
 .tool[data-tool="pen"].active,
 .tool[data-tool="text"].active {
-  border-color: rgba(255, 92, 122, 0.5);
-  background: var(--coral-soft);
+  background: var(--red-soft);
+  box-shadow: inset 0 -3px 0 var(--red);
 }
 
 /* ---------------------------------------------------------------- fields */
@@ -432,13 +520,15 @@ button:not(:disabled):active {
 .field {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 
 .field > span {
-  color: var(--paper-dim);
-  font-size: 11.5px;
-  font-weight: 600;
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 textarea,
@@ -446,25 +536,24 @@ input[type="text"],
 input:not([type]) {
   width: 100%;
   padding: 8px 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
-  color: var(--paper);
-  background: rgba(11, 10, 18, 0.55);
+  border: var(--border);
+  color: var(--ink);
+  background: var(--paper-2);
   font-family: inherit;
   font-size: 12.5px;
-  line-height: 1.45;
+  line-height: 1.4;
   resize: vertical;
 }
 
 textarea::placeholder,
 input::placeholder {
-  color: rgba(139, 138, 166, 0.7);
+  color: var(--ink-mute);
 }
 
 textarea:focus,
 input:focus {
   outline: none;
-  border-color: rgba(124, 107, 255, 0.6);
+  background: var(--paper);
   box-shadow: var(--ring);
 }
 
@@ -477,8 +566,11 @@ input:focus {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  color: var(--paper-dim);
-  font-size: 11.5px;
+  padding: 8px;
+  border: var(--border-hair);
+  color: var(--ink-soft);
+  background: var(--paper-2);
+  font-size: 11px;
   cursor: pointer;
 }
 
@@ -486,14 +578,14 @@ input:focus {
   width: 15px;
   height: 15px;
   margin: 1px 0 0;
-  accent-color: var(--violet);
+  accent-color: var(--ink);
   flex: none;
 }
 
 .toggle small {
   display: block;
-  color: var(--paper-mute);
-  font-size: 10.5px;
+  color: var(--ink-mute);
+  font-size: 10px;
 }
 
 /* ---------------------------------------------------------------- frames */
@@ -505,13 +597,14 @@ input:focus {
 }
 
 .frames.empty {
-  padding: 16px;
-  border: 1px dashed var(--line-strong);
-  border-radius: var(--r-md);
-  color: var(--paper-mute);
+  padding: 18px 12px;
+  border: 2px dashed var(--line-soft);
+  color: var(--ink-mute);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10.5px;
+  letter-spacing: 0.4px;
   text-align: center;
+  text-transform: uppercase;
 }
 
 .frame {
@@ -519,51 +612,72 @@ input:focus {
   grid-template-columns: 54px 1fr auto;
   align-items: center;
   gap: var(--gap-2);
-  padding: 7px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: rgba(247, 247, 251, 0.035);
+  padding: 6px;
+  border: var(--border);
+  background: var(--paper);
 }
 
 .frame img {
   width: 54px;
   height: 38px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-sm);
+  border: var(--border-hair);
   object-fit: cover;
-  background: var(--ink-900);
+  background: var(--paper-3);
 }
 
 .frame strong {
   display: block;
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 800;
+  letter-spacing: -0.01em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .frame small {
-  color: var(--paper-mute);
+  color: var(--ink-mute);
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 10px;
 }
 
-.frame button {
+.frame button[data-act="remove"] {
   width: 24px;
   height: 24px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-sm);
-  color: var(--paper-mute);
+  border: var(--border-hair);
+  box-shadow: none;
+  color: var(--ink-mute);
   background: transparent;
   font-size: 14px;
   line-height: 1;
 }
 
-.frame button:hover {
-  color: var(--coral);
-  border-color: rgba(255, 92, 122, 0.4);
-  background: var(--coral-soft);
+.frame button[data-act="remove"]:hover {
+  color: var(--always-paper);
+  background: var(--red);
+}
+
+.frame button[data-act="framing"] {
+  margin-top: 4px;
+  padding: 2px 7px;
+  border: var(--border-hair);
+  box-shadow: none;
+  color: var(--ink-mute);
+  background: transparent;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.4px;
+  line-height: 1.6;
+  text-transform: uppercase;
+}
+
+.frame button[data-act="framing"][aria-pressed="true"] {
+  color: var(--ink);
+  border-color: currentColor;
+}
+
+.frame button[data-act="framing"]:disabled {
+  opacity: 0.45;
 }
 
 /* ---------------------------------------------------------------- review */
@@ -571,13 +685,12 @@ input:focus {
 .review {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 6px;
   padding: var(--gap-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: rgba(11, 10, 18, 0.45);
+  border: var(--border-hair);
+  background: var(--paper-2);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10.5px;
 }
 
 .review:empty {
@@ -598,24 +711,26 @@ input:focus {
 }
 
 .review .row.ok {
-  color: var(--paper-dim);
+  color: var(--ink-soft);
 }
 
 .review .row.ok::before {
   content: "✓";
-  color: var(--teal);
+  color: var(--green);
 }
 
 .review .row.warn {
-  color: var(--amber);
+  color: var(--ink);
+  font-weight: 700;
 }
 
 .review .row.warn::before {
   content: "!";
+  color: var(--red);
 }
 
 .review .row.gone {
-  color: var(--paper-mute);
+  color: var(--ink-mute);
 }
 
 .review .row.gone::before {
@@ -623,43 +738,56 @@ input:focus {
 }
 
 .review .head {
-  color: var(--paper-mute);
-  font-size: 9.5px;
+  color: var(--ink-mute);
+  font-size: 9px;
   font-weight: 700;
-  letter-spacing: 1.1px;
+  letter-spacing: 1.2px;
   text-transform: uppercase;
 }
 
 .result {
   margin: 0;
-  color: var(--paper-dim);
+  color: var(--ink-soft);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10.5px;
   word-break: break-word;
 }
 
 .result a {
-  color: var(--teal);
+  color: var(--ink);
 }
 
 .result code {
   padding: 1px 5px;
-  border-radius: 5px;
-  background: rgba(247, 247, 251, 0.08);
+  color: var(--always-ink);
+  background: var(--yellow);
 }
 
 .exportCard {
-  border-color: rgba(42, 217, 196, 0.2);
+  box-shadow: var(--shadow-2);
 }
 
 footer {
   margin-top: auto;
-  padding-top: var(--gap-1);
+  padding-top: var(--gap-2);
+  border-top: var(--border-hair);
 }
 
-/* Wider panels get two tool rows instead of a stretched column. */
+/* Wider panels get one tool row instead of a stretched grid. */
 @media (min-width: 460px) {
   .toolGrid {
     grid-template-columns: repeat(6, 1fr);
+  }
+
+  .tool:nth-child(3n) {
+    border-right: var(--border-hair);
+  }
+
+  .tool {
+    border-bottom: 0;
+  }
+
+  .tool:last-child {
+    border-right: 0;
   }
 }

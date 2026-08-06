@@ -1,0 +1,9 @@
+{
+  "name": "com.contextcapsule.host",
+  "description": "Local storage host for Context Capsule",
+  "path": "C:\\Ranit\\Libs\\Fe-shot\\companion\\context-capsule-host.cmd",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://nffphcchkkpimeaamogjbpkpjmmfneea/"
+  ]
+}

@@ -228,6 +228,92 @@ describe("bounded collections", () => {
   });
 });
 
+describe("storage quota discipline", () => {
+  /*
+   * The count caps allow 120 response bodies at 1 MB each, which is an order of
+   * magnitude past the 10 MB chrome.storage.session quota. Exceeding it makes
+   * set() reject and loses the entire session write while capture continues.
+   */
+  function fillWithBodies(store, session, count, kb) {
+    for (let i = 0; i < count; i++) {
+      store.entrySet(
+        session.responseBodies,
+        `req-${i}`,
+        { body: "x".repeat(kb * 1024) },
+        store.LIMITS.responseBodies
+      );
+    }
+  }
+
+  it("evicts oldest bodies until the session fits its budget", async () => {
+    const store = await loadStore();
+
+    const session = store.createSession(1);
+
+    fillWithBodies(store, session, 100, 100);
+
+    const before = session.responseBodies.length;
+
+    const result = store.trimToBudget(session);
+
+    expect(result.trimmed).toBe(true);
+    expect(result.bytes).toBeLessThanOrEqual(store.LIMITS.sessionBytes);
+    expect(session.responseBodies.length).toBeLessThan(before);
+
+    /* Oldest-first: whatever survived must be the newest entries. */
+    expect(store.entryGet(session.responseBodies, "req-99")).toBeDefined();
+    expect(store.entryGet(session.responseBodies, "req-0")).toBeUndefined();
+  });
+
+  it("leaves a session under budget untouched", async () => {
+    const store = await loadStore();
+
+    const session = store.createSession(1);
+
+    fillWithBodies(store, session, 3, 10);
+
+    const result = store.trimToBudget(session);
+
+    expect(result.trimmed).toBe(false);
+    expect(session.responseBodies).toHaveLength(3);
+    expect(session.quotaDropped).toBeUndefined();
+  });
+
+  it("flushes an oversized session instead of losing the write", async () => {
+    const store = await loadStore();
+
+    const session = store.createSession(4);
+
+    fillWithBodies(store, session, 100, 100);
+
+    await store.putSession(session);
+
+    const stored = storage["cc.session.4"];
+
+    expect(stored).toBeDefined();
+    expect(stored.responseBodies.length).toBeGreaterThan(0);
+    expect(JSON.stringify(stored).length).toBeLessThanOrEqual(
+      store.LIMITS.sessionBytes
+    );
+  });
+
+  it("declares the dropped evidence to the agent", async () => {
+    const store = await loadStore();
+
+    const session = store.createSession(1);
+
+    fillWithBodies(store, session, 100, 100);
+    store.trimToBudget(session);
+
+    const evidence = store.windowedEvidence(session);
+
+    expect(evidence.captureWindow.truncated.storageQuota).toBe(true);
+    expect(
+      evidence.captureWindow.quotaDropped.responseBodies
+    ).toBeGreaterThan(0);
+  });
+});
+
 describe("windowedEvidence", () => {
   it("keeps only the rolling window and joins bodies", async () => {
     const store = await loadStore();

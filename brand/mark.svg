@@ -1,23 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Context Capsule mark">
-  <defs>
-    <linearGradient id="cc-field" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#7C6BFF"/>
-      <stop offset="1" stop-color="#4B3BD8"/>
-    </linearGradient>
-  </defs>
+  <!--
+    Two flat colours, hard edges, no gradient. The mark has to survive being
+    16 pixels wide in a browser toolbar, so nothing in it is subtle.
 
-  <!-- Field: the browser surface -->
-  <rect x="0" y="0" width="128" height="128" rx="30" fill="url(#cc-field)"/>
+    tools/build-icons.mjs reproduces this geometry analytically — the wedge is
+    the arc from 192deg round to 118deg. Change one and change the other.
+  -->
 
-  <!-- The capsule: a sealed container, tilted so it reads as an object, not a button -->
-  <g transform="rotate(-45 64 64)">
-    <rect x="30" y="46" width="68" height="36" rx="18"
-          fill="none" stroke="#F7F7FB" stroke-width="9"/>
-    <!-- Seam: two halves, closed -->
-    <line x1="64" y1="46" x2="64" y2="82" stroke="#F7F7FB" stroke-width="5" opacity="0.55"/>
-  </g>
+  <!-- Field: the tile, matching the panel's hard-edged cards -->
+  <rect x="0" y="0" width="128" height="128" rx="10" fill="#FFE047"/>
+
+  <!--
+    The capsule: a disc with a wedge taken out of it — a container with its
+    contents extracted, open toward the thing it took them from.
+  -->
+  <path fill="#0A0A0A"
+        d="M64 64 L23.89 55.44 A41 41 0 1 0 44.75 100.15 Z"/>
 
   <!-- Reticle: the human pointing at the exact thing -->
-  <circle cx="64" cy="64" r="11" fill="#2AD9C4"/>
-  <circle cx="64" cy="64" r="11" fill="none" stroke="#0E0D17" stroke-width="3.5" opacity="0.35"/>
+  <circle cx="64" cy="64" r="11" fill="#FFE047"/>
 </svg>

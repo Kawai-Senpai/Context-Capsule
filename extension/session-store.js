@@ -144,9 +144,30 @@ export async function flush(tabId) {
     .then(async () => {
       session.lastFlushedAt = Date.now();
 
-      await chrome.storage.session.set({
-        [keyFor(tabId)]: session
-      });
+      trimToBudget(session);
+
+      try {
+        await chrome.storage.session.set({
+          [keyFor(tabId)]: session
+        });
+      } catch (error) {
+        /*
+         * The budget is a guess at the encoded size and the quota is shared
+         * with every other armed tab, so it can still be exceeded. Losing the
+         * bodies is bad; losing the entire session write is worse, because
+         * capture keeps running and the export looks complete.
+         */
+        trimToBudget(session, Math.floor(LIMITS.sessionBytes / 4));
+
+        await chrome.storage.session.set({
+          [keyFor(tabId)]: session
+        });
+
+        console.warn(
+          "Context Capsule: session trimmed to fit storage quota.",
+          error
+        );
+      }
 
       return session;
     });
@@ -186,8 +207,76 @@ export const LIMITS = {
   requests: 300,
   responseBodies: 120,
   navigations: 40,
-  windowMs: 60_000
+  windowMs: 60_000,
+
+  /*
+   * Counts alone do not bound size: 120 response bodies at the 1 MB per-body
+   * capture limit is 120 MB against a 10 MB chrome.storage.session quota that
+   * every armed tab shares. Exceeding it makes set() reject, which loses the
+   * whole session write while capture carries on — so the budget is enforced
+   * in bytes at flush time, well under quota to leave room for other tabs.
+   */
+  sessionBytes: 4_000_000
 };
+
+function estimateBytes(session) {
+  try {
+    return JSON.stringify(session).length;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+/**
+ * Evict oldest-first until the session fits its byte budget.
+ *
+ * Response bodies go first because they are the only unbounded-by-shape
+ * collection; events and requests follow. Whatever is dropped is recorded on
+ * the session so the capsule can state the loss rather than hide it.
+ */
+export function trimToBudget(session, budget = LIMITS.sessionBytes) {
+  let bytes = estimateBytes(session);
+
+  if (bytes <= budget) {
+    return { trimmed: false, bytes };
+  }
+
+  const dropped = session.quotaDropped || {
+    responseBodies: 0,
+    requests: 0,
+    events: 0
+  };
+
+  /* Oldest-first, in the order we are willing to lose evidence. */
+  const order = [
+    ["responseBodies", session.responseBodies],
+    ["requests", session.requests],
+    ["events", session.events]
+  ];
+
+  for (const [name, list] of order) {
+    /*
+     * A quarter at a time: re-serialising after every single eviction turns
+     * this into O(n^2) on exactly the sessions that are already too big.
+     */
+    while (bytes > budget && list.length) {
+      const count = Math.max(1, Math.ceil(list.length / 4));
+
+      list.splice(0, count);
+      dropped[name] += count;
+
+      bytes = estimateBytes(session);
+    }
+
+    if (bytes <= budget) {
+      break;
+    }
+  }
+
+  session.quotaDropped = dropped;
+
+  return { trimmed: true, bytes, dropped };
+}
 
 export function nextSequence(session) {
   session.sequence += 1;
@@ -290,8 +379,17 @@ export function windowedEvidence(session, now = Date.now()) {
           session.requests.length >= LIMITS.requests,
         responseBodies:
           session.responseBodies.length >=
-          LIMITS.responseBodies
-      }
+          LIMITS.responseBodies,
+
+        /*
+         * Distinct from the count caps above: this says evidence was dropped
+         * to fit the storage quota, which an agent must not read as "the page
+         * made no other requests".
+         */
+        storageQuota: Boolean(session.quotaDropped)
+      },
+
+      quotaDropped: session.quotaDropped || null
     },
 
     navigations: session.navigations,

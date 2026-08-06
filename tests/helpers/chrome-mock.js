@@ -6,7 +6,7 @@
  * service worker: reset the modules, keep the storage.
  */
 
-export function installChromeMock({ storage = {} } = {}) {
+export function installChromeMock({ storage = {}, local = {} } = {}) {
   const listeners = new Map();
 
   const on = (name) => ({
@@ -53,6 +53,38 @@ export function installChromeMock({ storage = {} } = {}) {
             delete storage[k];
           }
         }
+      },
+
+      /*
+       * Preferences (auto-arm) live in storage.local so they outlast the
+       * browser session that storage.session is scoped to.
+       */
+      local: {
+        async get(key) {
+          if (key === null || key === undefined) {
+            return { ...local };
+          }
+
+          const keys = Array.isArray(key) ? key : [key];
+
+          return Object.fromEntries(
+            keys
+              .filter((k) => k in local)
+              .map((k) => [k, structuredClone(local[k])])
+          );
+        },
+
+        async set(items) {
+          for (const [k, v] of Object.entries(items)) {
+            local[k] = structuredClone(v);
+          }
+        },
+
+        async remove(key) {
+          for (const k of Array.isArray(key) ? key : [key]) {
+            delete local[k];
+          }
+        }
       }
     },
 
@@ -76,12 +108,24 @@ export function installChromeMock({ storage = {} } = {}) {
     tabs: {
       onUpdated: on("tabs.onUpdated"),
       onRemoved: on("tabs.onRemoved"),
+      onActivated: on("tabs.onActivated"),
       query: async () => [
         { id: 1, windowId: 1, title: "Test", url: "http://localhost/" }
       ],
+      get: async (tabId) => ({
+        id: tabId,
+        windowId: 1,
+        title: "Test",
+        url: "http://localhost/"
+      }),
       sendMessage: async () => ({ ok: true }),
       captureVisibleTab: async () =>
         "data:image/png;base64,iVBORw0KGgo="
+    },
+
+    windows: {
+      WINDOW_ID_NONE: -1,
+      onFocusChanged: on("windows.onFocusChanged")
     },
 
     scripting: {

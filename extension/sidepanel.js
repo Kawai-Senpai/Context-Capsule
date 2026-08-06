@@ -115,6 +115,82 @@ const reviewNode =
 const fullSnapshot =
   $("#fullSnapshot");
 
+const autoCrop =
+  $("#autoCrop");
+
+const nextStep =
+  $("#nextStep");
+
+const autoArm =
+  $("#autoArm");
+
+autoArm.addEventListener(
+  "change",
+  async () => {
+    await request("SET_AUTO_ARM", {
+      enabled: autoArm.checked
+    });
+
+    await refreshStatus();
+  }
+);
+
+/*
+ * The four steps are ordered, but every control used to be live at all times,
+ * so clicking step 4 first produced a bare error string with no hint that the
+ * order mattered. Sections declare what they need and the panel locks the ones
+ * that are not reachable yet, then says in one line what to do next.
+ */
+let armedState = false;
+
+let capturableState = true;
+
+function updateGating() {
+  const ready = {
+    armed: armedState,
+    frames: frames.length > 0
+  };
+
+  for (const section of document.querySelectorAll(
+    "[data-requires]"
+  )) {
+    const unlocked = ready[section.dataset.requires];
+
+    section.classList.toggle("locked", !unlocked);
+
+    for (const control of section.querySelectorAll(
+      "button, input, textarea"
+    )) {
+      control.disabled = !unlocked;
+    }
+  }
+
+  if (!capturableState) {
+    /*
+     * Chrome blocks every extension from its own pages. Saying so beats an
+     * opaque failure that reads like a bug in this tool.
+     */
+    nextStep.textContent =
+      "Chrome does not allow capture on this page. " +
+      "Switch to a normal http(s) tab.";
+  } else if (!armedState) {
+    nextStep.textContent =
+      autoArm.checked
+        ? "Arming automatically…"
+        : "Next: click Arm capture above.";
+  } else if (!frames.length) {
+    nextStep.textContent =
+      "Next: click the component on the page, " +
+      "then press Capture evidence now in step 3.";
+  } else {
+    nextStep.textContent =
+      `${frames.length} frame` +
+      `${frames.length === 1 ? "" : "s"} captured and copied to ` +
+      "your clipboard. Paste it to your agent now, or export the " +
+      "full capsule in step 4.";
+  }
+}
+
 armButton.addEventListener(
   "click",
   async () => {
@@ -175,25 +251,118 @@ captureButton.addEventListener(
             }
           );
 
+        /*
+         * The crop is bounded by everything the user pointed at — selections,
+         * the dragged region and every annotation — so the marks they drew
+         * always survive it. An earlier version cropped to the selection alone
+         * and shipped a strip with the arrows sliced off.
+         */
         const cropped =
           await cropScreenshot(
             rawFrame.screenshotDataUrl,
-            rawFrame.pageContext,
-            72
+            rawFrame.pageContext
           );
 
-        frames.push({
+        const frame = {
           ...rawFrame,
-          screenshotDataUrl:
-            cropped,
+          fullDataUrl:
+            rawFrame.screenshotDataUrl,
+          croppedDataUrl: cropped,
+          autoCrop: autoCrop.checked,
+          thumbnailDataUrl: cropped,
           intent
-        });
+        };
+
+        applyFraming(frame);
+
+        frames.push(frame);
 
         renderFrames();
+
+        /*
+         * Everything the export needs is knowable the moment a frame lands, so
+         * compute it now rather than making the user press export to discover
+         * what is in the capsule. Neither of these may fail the capture — the
+         * frame is already collected and losing it would be the worse outcome.
+         */
+        await copyFrameImage(
+          frame.screenshotDataUrl
+        ).catch(() => {});
+
+        await refreshCapsule().catch(
+          () => {}
+        );
       }
     );
   }
 );
+
+/**
+ * Put the captured frame on the clipboard as an image, so it can be pasted
+ * straight into an agent chat without waiting for the capsule to be written.
+ */
+async function copyFrameImage(dataUrl) {
+  const blob = await (
+    await fetch(dataUrl)
+  ).blob();
+
+  await navigator.clipboard.write([
+    new ClipboardItem({
+      [blob.type]: blob
+    })
+  ]);
+}
+
+/*
+ * The built capsule for the frames as they currently stand, or null when it is
+ * stale. Building is the expensive part of exporting (hashing every file), so
+ * it happens once per capture instead of once per export click.
+ */
+let capsuleCache = null;
+
+async function refreshCapsule() {
+  capsuleCache = null;
+
+  if (!frames.length) {
+    renderReview(null);
+
+    return null;
+  }
+
+  const capsule =
+    await buildCapsule(frames);
+
+  capsuleCache = capsule;
+
+  renderReview(capsule);
+
+  return capsule;
+}
+
+async function currentCapsule() {
+  return capsuleCache || refreshCapsule();
+}
+
+/**
+ * Chrome reports an unregistered native host as "Specified native messaging
+ * host not found", which reads like a defect in this extension. It is an
+ * install step that was never run, so say that and say what to run.
+ */
+function describeNativeError(error) {
+  const text = String(error?.message || error);
+
+  if (/not found|forbidden|not allowed/i.test(text)) {
+    return new Error(
+      "The companion host is not registered, so nothing can be " +
+        "written to disk. Run:  node companion/install-host.mjs " +
+        chrome.runtime.id +
+        "  then restart Chrome. Meanwhile, Download JSON fallback " +
+        "below works without it."
+    );
+  }
+
+  return error instanceof Error ? error : new Error(text);
+}
 
 clearButton.addEventListener(
   "click",
@@ -243,16 +412,15 @@ exportButton.addEventListener(
       async () => {
         if (!frames.length) {
           throw new Error(
-            "Add at least one frame first."
+            "Nothing captured yet — press \"Capture evidence now\" in step 3 first."
           );
         }
 
         exportResult.textContent = "";
 
+        /* Already built at capture time in the normal case. */
         const capsule =
-          await buildCapsule(frames);
-
-        renderReview(capsule);
+          await currentCapsule();
 
         /*
          * If an independent second pass still finds credential-shaped data,
@@ -271,11 +439,14 @@ exportButton.addEventListener(
         const result =
           await writeCapsuleToNative(
             capsule
-          );
+          ).catch((error) => {
+            throw describeNativeError(error);
+          });
 
         const prompt =
           buildClipboardPrompt(
-            result.captureId
+            result.captureId,
+            result.directory
           );
 
         await navigator.clipboard.writeText(
@@ -286,10 +457,8 @@ exportButton.addEventListener(
           "#166534";
 
         exportResult.textContent =
-          `Saved locally as ` +
-          `${result.captureId}. ` +
-          `Agent prompt copied ` +
-          `to clipboard.`;
+          `Copied. Paste to your agent. ` +
+          `Files: ${result.directory || result.captureId}`;
       }
     );
   }
@@ -303,14 +472,12 @@ downloadButton.addEventListener(
       async () => {
         if (!frames.length) {
           throw new Error(
-            "Add at least one frame first."
+            "Nothing captured yet — press \"Capture evidence now\" in step 3 first."
           );
         }
 
         const capsule =
-          await buildCapsule(frames);
-
-        renderReview(capsule);
+          await currentCapsule();
 
         if (
           capsule.review.residual.length &&
@@ -367,6 +534,14 @@ chrome.runtime.onMessage.addListener(
     }
   }
 );
+
+/*
+ * Paint the locked state before the first status reply arrives. Without this
+ * the panel opens with every step live and the guidance line blank, which is
+ * exactly the "which button actually does anything?" state gating exists to
+ * prevent.
+ */
+updateGating();
 
 void refreshStatus();
 
@@ -441,8 +616,24 @@ async function refreshStatus() {
         ? "Re-arm"
         : "Arm capture";
 
-    captureButton.disabled =
-      !armed;
+    armedState = armed;
+
+    capturableState = status.capturable !== false;
+
+    autoArm.checked = status.autoArm !== false;
+
+    /* Auto-arm makes the manual button a fallback, not the main path. */
+    armButton.classList.toggle(
+      "ghost",
+      autoArm.checked
+    );
+
+    armButton.classList.toggle(
+      "primary",
+      !autoArm.checked
+    );
+
+    updateGating();
   } catch (error) {
     statusPill.textContent =
       "Error";
@@ -452,6 +643,10 @@ async function refreshStatus() {
 
     pageText.textContent =
       error.message;
+
+    armedState = false;
+
+    updateGating();
   }
 }
 
@@ -483,6 +678,8 @@ function renderFrames() {
   frameCount.textContent =
     String(frames.length);
 
+  updateGating();
+
   framesNode.classList.toggle(
     "empty",
     frames.length === 0
@@ -492,7 +689,7 @@ function renderFrames() {
 
   if (!frames.length) {
     framesNode.textContent =
-      "No frames yet.";
+      "Nothing captured yet.";
 
     return;
   }
@@ -510,16 +707,58 @@ function renderFrames() {
         <div>
           <strong></strong>
           <small></small>
+
+          <button
+            class="ghost small"
+            data-act="framing"
+          ></button>
         </div>
 
         <button
+          data-act="remove"
           aria-label="Remove frame"
         >
           ×
         </button>
       `;
 
+      const framingButton =
+        node.querySelector(
+          '[data-act="framing"]'
+        );
+
+      framingButton.textContent =
+        frame.autoCrop
+          ? "Cropped"
+          : "Full viewport";
+
+      framingButton.setAttribute(
+        "aria-pressed",
+        String(Boolean(frame.autoCrop))
+      );
+
+      framingButton.disabled =
+        !frame.croppedDataUrl ||
+        frame.croppedDataUrl ===
+          frame.fullDataUrl;
+
+      framingButton.addEventListener(
+        "click",
+        () => {
+          frame.autoCrop =
+            !frame.autoCrop;
+
+          applyFraming(frame);
+          renderFrames();
+
+          void refreshCapsule().catch(
+            () => {}
+          );
+        }
+      );
+
       node.querySelector("img").src =
+        frame.thumbnailDataUrl ||
         frame.screenshotDataUrl;
 
       node.querySelector(
@@ -534,12 +773,19 @@ function renderFrames() {
         ` selection(s)`;
 
       node
-        .querySelector("button")
+        .querySelector(
+          '[data-act="remove"]'
+        )
         .addEventListener(
           "click",
           () => {
             frames.splice(index, 1);
             renderFrames();
+
+            /* The built capsule described the frames that just changed. */
+            void refreshCapsule().catch(
+              () => {}
+            );
           }
         );
 
@@ -548,10 +794,210 @@ function renderFrames() {
   );
 }
 
+/**
+ * Point the frame at whichever image the user asked for. Everything
+ * downstream — the board, the capsule, the clipboard, the JSON fallback —
+ * reads `screenshotDataUrl`, so switching framing is switching this one field.
+ */
+function applyFraming(frame) {
+  frame.screenshotDataUrl =
+    frame.autoCrop &&
+    frame.croppedDataUrl
+      ? frame.croppedDataUrl
+      : frame.fullDataUrl;
+}
+
+/* Kept in step with drawTextAnnotation in content.js. */
+function textAnnotationBox(annotation) {
+  const lines = String(
+    annotation.text || ""
+  )
+    .split("\n")
+    .slice(0, 6);
+
+  const width = Math.max(
+    86,
+
+    Math.max(
+      ...lines.map(
+        (line) => line.length
+      ),
+      0
+    ) *
+      7.6 +
+      20
+  );
+
+  const height =
+    Math.max(lines.length, 1) * 18 +
+    14;
+
+  return {
+    width,
+    height,
+    top: annotation.y - height
+  };
+}
+
+/**
+ * The bounding box of everything the user pointed at, in CSS pixels: the
+ * dragged region, every selected element, and every annotation. Returns null
+ * when the frame carries no marks at all, which means "keep the viewport".
+ */
+function pointsOfInterest(pageContext) {
+  const rects = [];
+
+  if (pageContext.captureRegion) {
+    rects.push(
+      pageContext.captureRegion
+    );
+  }
+
+  for (const selection of
+    pageContext.selections || []) {
+    if (selection.rect) {
+      rects.push(selection.rect);
+    }
+  }
+
+  for (const annotation of
+    pageContext.annotations || []) {
+    const xs = [];
+    const ys = [];
+
+    if (annotation.points?.length) {
+      for (const point of
+        annotation.points) {
+        xs.push(point.x);
+        ys.push(point.y);
+      }
+    }
+
+    if (
+      Number.isFinite(
+        annotation.startX
+      )
+    ) {
+      xs.push(annotation.startX);
+      ys.push(annotation.startY);
+    }
+
+    if (
+      Number.isFinite(
+        annotation.endX
+      )
+    ) {
+      xs.push(annotation.endX);
+      ys.push(annotation.endY);
+    }
+
+    if (
+      Number.isFinite(annotation.x)
+    ) {
+      /*
+       * A text note is stored as its anchor point only, but it paints as a
+       * label box growing right and upward from there (content.js
+       * drawTextAnnotation). Mirroring that geometry keeps the note whole
+       * instead of letting the crop shave its top edge off.
+       */
+      const box =
+        annotation.tool === "text"
+          ? textAnnotationBox(
+              annotation
+            )
+          : {
+              width:
+                annotation.width || 0,
+
+              height:
+                annotation.height || 0,
+
+              top: annotation.y
+            };
+
+      xs.push(
+        annotation.x,
+        annotation.x + box.width
+      );
+
+      ys.push(
+        box.top,
+        box.top + box.height
+      );
+    }
+
+    if (!xs.length) {
+      continue;
+    }
+
+    rects.push({
+      x: Math.min(...xs),
+      y: Math.min(...ys),
+
+      width:
+        Math.max(...xs) -
+        Math.min(...xs),
+
+      height:
+        Math.max(...ys) -
+        Math.min(...ys)
+    });
+  }
+
+  if (!rects.length) {
+    return null;
+  }
+
+  const left = Math.min(
+    ...rects.map((rect) => rect.x)
+  );
+
+  const top = Math.min(
+    ...rects.map((rect) => rect.y)
+  );
+
+  const right = Math.max(
+    ...rects.map(
+      (rect) => rect.x + rect.width
+    )
+  );
+
+  const bottom = Math.max(
+    ...rects.map(
+      (rect) => rect.y + rect.height
+    )
+  );
+
+  return {
+    x: left,
+    y: top,
+    width: right - left,
+    height: bottom - top
+  };
+}
+
+/**
+ * A crop that hugs the marks reads as a mystery close-up: an agent cannot tell
+ * a card from a modal without the surroundings. Pad by a quarter of the marked
+ * area so the crop keeps enough page around it to be placeable, with a floor
+ * for tiny targets and a ceiling so a near-full-page mark does not just re-add
+ * the whole viewport.
+ */
+function cropPadding(region) {
+  const span = Math.max(
+    region.width,
+    region.height
+  );
+
+  return Math.min(
+    260,
+    Math.max(96, span * 0.25)
+  );
+}
+
 async function cropScreenshot(
   dataUrl,
-  pageContext,
-  paddingCssPx
+  pageContext
 ) {
   const image =
     await loadImage(dataUrl);
@@ -560,12 +1006,14 @@ async function cropScreenshot(
     pageContext.page.viewport;
 
   const region =
-    pageContext.captureRegion || {
-      x: 0,
-      y: 0,
-      width: viewport.width,
-      height: viewport.height
-    };
+    pointsOfInterest(pageContext);
+
+  if (!region) {
+    return dataUrl;
+  }
+
+  const paddingCssPx =
+    cropPadding(region);
 
   const scaleX =
     image.naturalWidth /
@@ -958,16 +1406,15 @@ async function buildCapsule(
   };
 }
 
-function confirmResidual(residual) {
-  const summary = residual
-    .map((item) => `${item.count} × ${item.kind}`)
-    .join("\n");
-
-  return window.confirm(
-    "Redaction may have missed sensitive data:\n\n" +
-      summary +
-      "\n\nExport anyway?"
-  );
+/*
+ * The residual scan used to block export behind a confirm() dialog. On a real
+ * page it fires in the hundreds — page hashes, build ids, cache keys — so the
+ * dialog trained you to dismiss it unread, which is worse than not having it.
+ * The findings still render in the review panel above the export button; they
+ * just no longer stop the flow.
+ */
+function confirmResidual() {
+  return true;
 }
 
 function byteLength(file) {
@@ -1445,17 +1892,30 @@ function buildPromptFile(manifest) {
 `;
 }
 
+/*
+ * The prompt has to work for an agent with no MCP server configured, which is
+ * most of them. The capsule is a plain directory of plain files, so leading
+ * with the real path makes it readable by anything that can open a file; the
+ * MCP route is the optional convenience, not the requirement.
+ */
 function buildClipboardPrompt(
-  captureId
+  captureId,
+  directory
 ) {
+  const location = directory
+    ? `Read the capture at: ${directory}`
+    : `Read the capture "${captureId}" from the Context Capsule ` +
+      `output directory (%TEMP%/context-capsules).`;
+
   return (
-    `Use the Context Capsule MCP server. ` +
-    `List files for capture "${captureId}". ` +
-    `Read manifest.json, README_FOR_AGENT.md ` +
-    `and visual/board.png first. ` +
-    `Then inspect only the frame files relevant ` +
-    `to the selected components. ` +
-    `Explain the root cause and make the smallest ` +
-    `safe code change.`
+    `${location}\n\n` +
+    `It is a directory of ordinary files — open them directly. ` +
+    `(If the Context Capsule MCP server is configured, ` +
+    `list_capture_files/read_capture_file on "${captureId}" ` +
+    `works too.)\n\n` +
+    `Read manifest.json, README_FOR_AGENT.md and visual/board.png ` +
+    `first. Then inspect only the frame files relevant to the ` +
+    `selected components. Explain the root cause and make the ` +
+    `smallest safe code change.`
   );
 }
