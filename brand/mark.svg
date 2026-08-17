@@ -15,7 +15,7 @@
     contents extracted, open toward the thing it took them from.
   -->
   <path fill="#0A0A0A"
-        d="M64 64 L23.89 55.44 A41 41 0 1 0 44.75 100.15 Z"/>
+        d="M64 64 L23.90 55.48 A41 41 0 1 1 44.75 100.20 Z"/>
 
   <!-- Reticle: the human pointing at the exact thing -->
   <circle cx="64" cy="64" r="11" fill="#FFE047"/>

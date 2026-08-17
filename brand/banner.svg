@@ -35,7 +35,7 @@
   <g transform="translate(64 56) scale(0.72)">
     <rect x="6" y="6" width="128" height="128" rx="10" fill="#0a0a0a"/>
     <rect x="0" y="0" width="128" height="128" rx="10" fill="#ffe047"/>
-    <path fill="#0a0a0a" d="M64 64 L23.89 55.44 A41 41 0 1 0 44.75 100.15 Z"/>
+    <path fill="#0a0a0a" d="M64 64 L23.90 55.48 A41 41 0 1 1 44.75 100.20 Z"/>
     <circle cx="64" cy="64" r="11" fill="#ffe047"/>
   </g>
 
