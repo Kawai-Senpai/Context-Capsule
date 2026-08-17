@@ -4,6 +4,10 @@
   "version": "0.2.0",
   "type": "module",
   "description": "Point at the bug, ship the evidence. A browser-side context compiler for coding agents.",
+  "author": {
+    "name": "Ranit Bhowmick",
+    "url": "https://ranitbhowmick.com"
+  },
   "engines": {
     "node": ">=20"
   },
@@ -16,5 +20,6 @@
   },
   "devDependencies": {
     "vitest": "^3.2.4"
-  }
+  },
+  "license": "MIT"
 }

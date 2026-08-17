@@ -291,6 +291,19 @@ npm run package            # build and package into dist/
 
 ---
 
+## Credits
+
+Designed and built by **[Ranit Bhowmick](https://ranitbhowmick.com)**.
+
+The design system lives in [`brand/BRAND.md`](brand/BRAND.md); canonical colour
+values are in [`extension/tokens.css`](extension/tokens.css).
+
+## License
+
+MIT © [Ranit Bhowmick](https://ranitbhowmick.com)
+
+---
+
 <div align="center">
 <sub><b>Figma comments + DevTools + MCP, for live applications.</b><br>
 The screenshot is just the cover page.</sub>
