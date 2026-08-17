@@ -128,7 +128,7 @@ Tools: `list_captures` · `list_capture_files` · `read_capture_file`.
 | Step | Action |
 | --- | --- |
 | **Arm** | Attaches the debugger and starts the rolling buffer. The status pill pulses while recording. |
-| **Select** | Click a component. <kbd>Shift</kbd>+click adds more. <kbd>↑</kbd><kbd>↓</kbd> walk parent/child, <kbd>←</kbd><kbd>→</kbd> walk siblings. |
+| **Select** | Click a component. <kbd>Ctrl</kbd>+click adds more. <kbd>↑</kbd><kbd>↓</kbd> walk parent/child, <kbd>←</kbd><kbd>→</kbd> walk siblings. |
 | **Mark** | Region, box, arrow, pen, text. Annotations are stored as JSON *and* drawn into the frame. |
 | **Describe** | What is wrong, what should happen. This is the single most valuable field in the capsule. |
 | **Add frames** | Change viewport, route, theme or state and capture again. Frames become a numbered board. |
