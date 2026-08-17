@@ -1,9 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" width="1200" height="320" role="img" aria-label="Context Capsule — a browser-side context compiler for coding agents">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" width="1200" height="400" role="img" aria-label="Context Capsule — point at the bug, ship the evidence. Select any part of a live web app and package everything a coding agent needs to understand it.">
+  <title>Context Capsule</title>
+
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#12101F"/>
       <stop offset="0.55" stop-color="#171331"/>
-      <stop offset="1" stop-color="#0E0D17"/>
+      <stop offset="1" stop-color="#0B0A12"/>
     </linearGradient>
 
     <linearGradient id="field" x1="0" y1="0" x2="1" y2="1">
@@ -11,90 +13,165 @@
       <stop offset="1" stop-color="#4B3BD8"/>
     </linearGradient>
 
-    <linearGradient id="glow" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#7C6BFF" stop-opacity="0.35"/>
+    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#7C6BFF" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#7C6BFF" stop-opacity="0"/>
+    </radialGradient>
+
+    <radialGradient id="halo-teal" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#2AD9C4" stop-opacity="0.16"/>
       <stop offset="1" stop-color="#2AD9C4" stop-opacity="0"/>
-    </linearGradient>
+    </radialGradient>
 
     <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-      <path d="M40 0H0V40" fill="none" stroke="#FFFFFF" stroke-opacity="0.035" stroke-width="1"/>
+      <path d="M40 0H0V40" fill="none" stroke="#FFFFFF" stroke-opacity="0.03" stroke-width="1"/>
     </pattern>
+
+    <clipPath id="card">
+      <rect x="672" y="58" width="452" height="284" rx="14"/>
+    </clipPath>
   </defs>
 
-  <rect width="1200" height="320" rx="20" fill="url(#bg)"/>
-  <rect width="1200" height="320" rx="20" fill="url(#grid)"/>
-  <rect width="1200" height="320" rx="20" fill="url(#glow)"/>
+  <!-- Field -->
+  <rect width="1200" height="400" rx="24" fill="url(#bg)"/>
+  <rect width="1200" height="400" rx="24" fill="url(#grid)"/>
+  <ellipse cx="210" cy="150" rx="420" ry="300" fill="url(#halo)"/>
+  <ellipse cx="900" cy="330" rx="380" ry="240" fill="url(#halo-teal)"/>
 
-  <!-- Selection frame: the human pointing at a component -->
-  <g opacity="0.9">
-    <rect x="748" y="86" width="340" height="150" rx="12"
-          fill="#7C6BFF" fill-opacity="0.06"
-          stroke="#7C6BFF" stroke-width="2"/>
+  <!-- ─────────────────────── Left: identity ─────────────────────── -->
 
-    <g fill="#7C6BFF">
-      <rect x="742" y="80" width="12" height="12" rx="3"/>
-      <rect x="1082" y="80" width="12" height="12" rx="3"/>
-      <rect x="742" y="230" width="12" height="12" rx="3"/>
-      <rect x="1082" y="230" width="12" height="12" rx="3"/>
+  <!-- Mark: capsule tilted −45°, split by a seam, teal reticle at centre -->
+  <g transform="translate(72 92)">
+    <rect x="0" y="0" width="112" height="112" rx="26" fill="url(#field)"/>
+    <g transform="rotate(-45 56 56)">
+      <rect x="26" y="40" width="60" height="32" rx="16"
+            fill="none" stroke="#F7F7FB" stroke-width="8"/>
+      <line x1="56" y1="40" x2="56" y2="72" stroke="#F7F7FB" stroke-width="4.5" opacity="0.55"/>
     </g>
-
-    <rect x="746" y="56" width="30" height="24" rx="7" fill="#7C6BFF"/>
-    <text x="761" y="73" text-anchor="middle"
-          font-family="ui-sans-serif, system-ui, sans-serif"
-          font-size="14" font-weight="700" fill="#FFFFFF">A</text>
-
-    <!-- Evidence rails leaving the selection -->
-    <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
-       font-size="12.5" fill="#8B8AA6">
-      <rect x="772" y="112" width="150" height="9" rx="4.5" fill="#F7F7FB" fill-opacity="0.14"/>
-      <rect x="772" y="132" width="240" height="9" rx="4.5" fill="#F7F7FB" fill-opacity="0.09"/>
-      <rect x="772" y="152" width="196" height="9" rx="4.5" fill="#F7F7FB" fill-opacity="0.09"/>
-      <rect x="772" y="188" width="86" height="26" rx="7" fill="#2AD9C4" fill-opacity="0.16"/>
-      <text x="784" y="205" fill="#2AD9C4">200 OK</text>
-    </g>
+    <circle cx="56" cy="56" r="9.5" fill="#2AD9C4"/>
+    <circle cx="56" cy="56" r="9.5" fill="none" stroke="#0B0A12" stroke-width="3" opacity="0.35"/>
   </g>
 
-  <!-- Mark -->
-  <g transform="translate(72 104) scale(0.875)">
-    <rect x="0" y="0" width="128" height="128" rx="30" fill="url(#field)"/>
-    <g transform="rotate(-45 64 64)">
-      <rect x="30" y="46" width="68" height="36" rx="18"
-            fill="none" stroke="#F7F7FB" stroke-width="9"/>
-      <line x1="64" y1="46" x2="64" y2="82" stroke="#F7F7FB" stroke-width="5" opacity="0.55"/>
-    </g>
-    <circle cx="64" cy="64" r="11" fill="#2AD9C4"/>
-    <circle cx="64" cy="64" r="11" fill="none" stroke="#0E0D17" stroke-width="3.5" opacity="0.35"/>
-  </g>
-
-  <text x="212" y="140"
+  <text x="72" y="252"
         font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif"
-        font-size="52" font-weight="700" letter-spacing="-1.4" fill="#F7F7FB">Context Capsule</text>
+        font-size="54" font-weight="700" letter-spacing="-1.6" fill="#F7F7FB">Context Capsule</text>
 
-  <text x="214" y="178"
+  <text x="74" y="288"
         font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
-        font-size="17" letter-spacing="0.5" fill="#7C6BFF">point at the bug · ship the evidence</text>
+        font-size="16" letter-spacing="0.6" fill="#7C6BFF">point at the bug · ship the evidence</text>
 
-  <text x="214" y="216"
+  <text x="74" y="322"
         font-family="ui-sans-serif, system-ui, sans-serif"
-        font-size="16.5" fill="#8B8AA6">Select any part of a live web app and package everything</text>
-
-  <text x="214" y="240"
+        font-size="16" fill="#8B8AA6">Select any part of a live web app and package everything</text>
+  <text x="74" y="344"
         font-family="ui-sans-serif, system-ui, sans-serif"
-        font-size="16.5" fill="#8B8AA6">a coding agent needs to understand it.</text>
+        font-size="16" fill="#8B8AA6">a coding agent needs to understand it.</text>
 
-  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12.5">
-    <g fill="#8B8AA6">
-      <rect x="214" y="262" width="92" height="26" rx="13" fill="#F7F7FB" fill-opacity="0.06"/>
-      <text x="230" y="279">local-only</text>
+  <!-- ──────────────── Right: what the panel actually does ──────────────── -->
 
-      <rect x="316" y="262" width="66" height="26" rx="13" fill="#F7F7FB" fill-opacity="0.06"/>
-      <text x="332" y="279">MV3</text>
+  <g clip-path="url(#card)">
+    <rect x="672" y="58" width="452" height="284" fill="#0B0A12" fill-opacity="0.55"/>
 
-      <rect x="392" y="262" width="62" height="26" rx="13" fill="#F7F7FB" fill-opacity="0.06"/>
-      <text x="408" y="279">MCP</text>
+    <!-- Panel header -->
+    <rect x="672" y="58" width="452" height="46" fill="#F7F7FB" fill-opacity="0.03"/>
+    <circle cx="696" cy="81" r="5" fill="#2AD9C4"/>
+    <text x="712" y="86"
+          font-family="ui-sans-serif, system-ui, sans-serif"
+          font-size="14" font-weight="600" fill="#F7F7FB">Context Capsule</text>
+    <rect x="1040" y="70" width="62" height="22" rx="11" fill="#2AD9C4" fill-opacity="0.14"/>
+    <text x="1071" y="85" text-anchor="middle"
+          font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+          font-size="11" letter-spacing="0.4" fill="#2AD9C4">ARMED</text>
 
-      <rect x="464" y="262" width="102" height="26" rx="13" fill="#F7F7FB" fill-opacity="0.06"/>
-      <text x="480" y="279">no cloud</text>
+    <!-- The four steps the panel is actually built from -->
+    <g font-family="ui-sans-serif, system-ui, sans-serif" font-size="13.5" fill="#B8B6CD">
+      <!-- 1 -->
+      <circle cx="700" cy="136" r="11" fill="#7C6BFF"/>
+      <text x="700" y="141" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">1</text>
+      <text x="722" y="141">Select and mark</text>
+
+      <!-- 2 -->
+      <circle cx="700" cy="176" r="11" fill="#7C6BFF"/>
+      <text x="700" y="181" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">2</text>
+      <text x="722" y="181">Describe the change</text>
+
+      <!-- 3 -->
+      <circle cx="700" cy="216" r="11" fill="#7C6BFF"/>
+      <text x="700" y="221" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">3</text>
+      <text x="722" y="221">Capture the evidence</text>
+
+      <!-- 4 -->
+      <circle cx="700" cy="256" r="11" fill="#7C6BFF"/>
+      <text x="700" y="261" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">4</text>
+      <text x="722" y="261">Export to your agent</text>
     </g>
+
+    <!-- Evidence counts: numbers, not adjectives -->
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12">
+      <text x="906" y="141" fill="#FFB454">3 selections</text>
+      <text x="906" y="181" fill="#8B8AA6">1 intent</text>
+      <text x="906" y="221" fill="#2AD9C4">37 events · 18 requests</text>
+      <text x="906" y="261" fill="#2AD9C4">capsule sealed</text>
+    </g>
+
+    <!-- Footer: what the capsule contains -->
+    <rect x="672" y="292" width="452" height="50" fill="#F7F7FB" fill-opacity="0.03"/>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11.5" fill="#8B8AA6">
+      <text x="696" y="313">screenshot · DOM · computed CSS</text>
+      <text x="696" y="330">console · network · storage · redaction report</text>
+    </g>
+  </g>
+
+  <!-- Card border, drawn after the clip so it stays crisp -->
+  <rect x="672" y="58" width="452" height="284" rx="14"
+        fill="none" stroke="#7C6BFF" stroke-opacity="0.35" stroke-width="1.5"/>
+
+  <!--
+    Amber marquee: the region *you* drew on the page under inspection, per the
+    colour contract. It sits outside the panel card, over the field, because
+    that is where selection actually happens - drawing it across the panel's own
+    rows read as a rendering fault rather than a deliberate mark.
+  -->
+  <g>
+    <rect x="470" y="96" width="150" height="96" rx="8"
+          fill="#FFB454" fill-opacity="0.06"
+          stroke="#FFB454" stroke-width="1.5" stroke-dasharray="5 4"/>
+    <g fill="#FFB454">
+      <rect x="465" y="91" width="9" height="9" rx="2.5"/>
+      <rect x="616" y="91" width="9" height="9" rx="2.5"/>
+      <rect x="465" y="188" width="9" height="9" rx="2.5"/>
+      <rect x="616" y="188" width="9" height="9" rx="2.5"/>
+    </g>
+    <rect x="466" y="74" width="22" height="18" rx="5" fill="#FFB454"/>
+    <text x="477" y="87" text-anchor="middle"
+          font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+          font-size="11" font-weight="700" fill="#0B0A12">A</text>
+
+    <!-- Skeleton of the component inside the marquee -->
+    <g fill="#F7F7FB">
+      <rect x="486" y="116" width="86" height="8" rx="4" fill-opacity="0.16"/>
+      <rect x="486" y="134" width="118" height="8" rx="4" fill-opacity="0.10"/>
+      <rect x="486" y="152" width="64" height="8" rx="4" fill-opacity="0.10"/>
+      <rect x="486" y="168" width="44" height="14" rx="4" fill="#FF5C7A" fill-opacity="0.22"/>
+    </g>
+
+    <!-- The rail from the marked region into the capsule -->
+    <path d="M628 144 H664" stroke="#FFB454" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.7"/>
+    <path d="M658 139 L666 144 L658 149 Z" fill="#FFB454" opacity="0.8"/>
+  </g>
+
+  <!-- Capability chips -->
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" fill="#8B8AA6">
+    <rect x="74" y="360" width="92" height="24" rx="12" fill="#F7F7FB" fill-opacity="0.06"/>
+    <text x="120" y="376" text-anchor="middle">local-only</text>
+
+    <rect x="176" y="360" width="60" height="24" rx="12" fill="#F7F7FB" fill-opacity="0.06"/>
+    <text x="206" y="376" text-anchor="middle">MV3</text>
+
+    <rect x="246" y="360" width="86" height="24" rx="12" fill="#F7F7FB" fill-opacity="0.06"/>
+    <text x="289" y="376" text-anchor="middle">no cloud</text>
+
+    <rect x="342" y="360" width="106" height="24" rx="12" fill="#F7F7FB" fill-opacity="0.06"/>
+    <text x="395" y="376" text-anchor="middle">redaction</text>
   </g>
 </svg>

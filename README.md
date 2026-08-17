@@ -8,7 +8,7 @@
 
 <br>
 
-[![tests](https://img.shields.io/badge/tests-106%20passing-2AD9C4?style=flat-square&labelColor=0B0A12)](tests)
+[![tests](https://img.shields.io/badge/tests-125%20passing-2AD9C4?style=flat-square&labelColor=0B0A12)](tests)
 [![manifest](https://img.shields.io/badge/chrome-manifest%20v3-7C6BFF?style=flat-square&labelColor=0B0A12)](extension/manifest.json)
 [![agent interface](https://img.shields.io/badge/agents-MCP%20stdio-7C6BFF?style=flat-square&labelColor=0B0A12)](companion/mcp-server.js)
 [![storage](https://img.shields.io/badge/data-local%20only-2AD9C4?style=flat-square&labelColor=0B0A12)](#security)
