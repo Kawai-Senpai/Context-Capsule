@@ -1,0 +1,183 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 560" width="1200" height="560" role="img" aria-label="How Context Capsule works: you arm capture and point at a component, the extension records console, network, DOM and CSS, the companion redacts and seals a capsule, and the agent reads it over MCP.">
+  <title>How Context Capsule works</title>
+
+  <!--
+    Same system as the banner and extension/tokens.css: paper field, black
+    structure, one loud yellow. Hard edges, offset shadow planes, no blur.
+
+      yellow  the step you are on
+      black   structure
+      blue    a tool you are holding
+      red     your annotation
+      green   a confirmed fact
+  -->
+
+  <defs>
+    <pattern id="f-rule" width="7" height="7" patternUnits="userSpaceOnUse">
+      <path d="M0 7 L7 0" stroke="#0a0a0a" stroke-opacity="0.07" stroke-width="1"/>
+    </pattern>
+
+    <marker id="f-tip" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#0a0a0a"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="560" fill="#f4f2ed"/>
+  <rect width="1200" height="560" fill="url(#f-rule)"/>
+  <rect x="0" y="0" width="1200" height="12" fill="#0a0a0a"/>
+  <rect x="0" y="548" width="1200" height="12" fill="#0a0a0a"/>
+
+  <!-- ───────────── Lane headers ───────────── -->
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+     font-size="11.5" font-weight="700" letter-spacing="1.6" fill="#7a7873">
+    <text x="64"  y="58">YOU</text>
+    <text x="372" y="58">EXTENSION</text>
+    <text x="716" y="58">COMPANION</text>
+    <text x="1010" y="58">AGENT</text>
+  </g>
+  <g stroke="#d8d5cc" stroke-width="1">
+    <line x1="344" y1="40" x2="344" y2="512"/>
+    <line x1="688" y1="40" x2="688" y2="512"/>
+    <line x1="982" y1="40" x2="982" y2="512"/>
+  </g>
+
+  <!-- ═══════ Row 1 ═══════ -->
+  <g>
+    <rect x="70" y="82" width="206" height="54" fill="#0a0a0a"/>
+    <rect x="64" y="76" width="206" height="54" fill="#ffe047" stroke="#0a0a0a" stroke-width="2"/>
+    <text x="82" y="100" font-family="Archivo, 'Helvetica Neue', Inter, ui-sans-serif, system-ui, sans-serif"
+          font-size="15" font-weight="800" fill="#0a0a0a">Arm capture</text>
+    <text x="82" y="119" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+          font-size="11" fill="#0a0a0a" opacity="0.75">one click, then use the app</text>
+
+    <line x1="276" y1="103" x2="358" y2="103" stroke="#0a0a0a" stroke-width="2" marker-end="url(#f-tip)"/>
+
+    <rect x="372" y="82" width="292" height="54" fill="#0a0a0a"/>
+    <rect x="366" y="76" width="292" height="54" fill="#ffffff" stroke="#0a0a0a" stroke-width="2"/>
+    <text x="384" y="100" font-family="Archivo, 'Helvetica Neue', Inter, ui-sans-serif, system-ui, sans-serif"
+          font-size="15" font-weight="800" fill="#0a0a0a">chrome.debugger attaches</text>
+    <text x="384" y="119" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+          font-size="11" fill="#1faa5f">rolling buffer starts recording</text>
+  </g>
+
+  <!-- ═══════ Row 2 ═══════ -->
+  <g>
+    <rect x="70" y="164" width="206" height="72" fill="#0a0a0a"/>
+    <rect x="64" y="158" width="206" height="72" fill="#ffe047" stroke="#0a0a0a" stroke-width="2"/>
+    <text x="82" y="182" font-family="Archivo, 'Helvetica Neue', Inter, ui-sans-serif, system-ui, sans-serif"
+          font-size="15" font-weight="800" fill="#0a0a0a">Point at the bug</text>
+    <text x="82" y="201" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+          font-size="11" fill="#0a0a0a" opacity="0.75">click · walk the tree</text>
+    <text x="82" y="218" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+          font-size="11" fill="#0a0a0a" opacity="0.75">box · arrow · pen · text</text>
+
+    <line x1="276" y1="194" x2="358" y2="194" stroke="#0a0a0a" stroke-width="2" marker-end="url(#f-tip)"/>
+
+    <rect x="372" y="164" width="292" height="72" fill="#0a0a0a"/>
+    <rect x="366" y="158" width="292" height="72" fill="#ffffff" stroke="#0a0a0a" stroke-width="2"/>
+    <text x="384" y="182" font-family="Archivo, 'Helvetica Neue', Inter, ui-sans-serif, system-ui, sans-serif"
+          font-size="15" font-weight="800" fill="#0a0a0a">Selection gets an ID</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11">
+      <rect x="384" y="192" width="20" height="19" fill="#ff4d3d"/>
+      <text x="394" y="206" text-anchor="middle" font-weight="700" fill="#ffffff">A</text>
+      <rect x="410" y="192" width="20" height="19" fill="#ff4d3d" fill-opacity="0.35"/>
+      <text x="420" y="206" text-anchor="middle" font-weight="700" fill="#0a0a0a">B</text>
+      <text x="440" y="206" fill="#7a7873">the join key across every file</text>
+    </g>
+  </g>
+
+  <!-- ═══════ Row 3 ═══════ -->
+  <g>
+    <rect x="70" y="264" width="206" height="72" fill="#0a0a0a"/>
+    <rect x="64" y="258" width="206" height="72" fill="#ffe047" stroke="#0a0a0a" stroke-width="2"/>
+    <text x="82" y="282" font-family="Archivo, 'Helvetica Neue', Inter, ui-sans-serif, system-ui, sans-serif"
+          font-size="15" font-weight="800" fill="#0a0a0a">Say what is wrong</text>
+    <text x="82" y="301" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+          font-size="11" fill="#0a0a0a" opacity="0.75">and what should</text>
+    <text x="82" y="318" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+          font-size="11" fill="#0a0a0a" opacity="0.75">happen instead</text>
+
+    <line x1="276" y1="294" x2="358" y2="294" stroke="#0a0a0a" stroke-width="2" marker-end="url(#f-tip)"/>
+
+    <rect x="372" y="264" width="292" height="72" fill="#0a0a0a"/>
+    <rect x="366" y="258" width="292" height="72" fill="#ffffff" stroke="#0a0a0a" stroke-width="2"/>
+    <text x="384" y="282" font-family="Archivo, 'Helvetica Neue', Inter, ui-sans-serif, system-ui, sans-serif"
+          font-size="15" font-weight="800" fill="#0a0a0a">Freeze and collect</text>
+    <text x="384" y="301" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+          font-size="11" fill="#7a7873">screenshot · DOM · computed CSS</text>
+    <text x="384" y="318" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+          font-size="11" fill="#7a7873">a11y · listeners · app state</text>
+  </g>
+
+  <!-- ═══════ Row 4 ═══════ -->
+  <g>
+    <rect x="70" y="364" width="206" height="54" fill="#0a0a0a"/>
+    <rect x="64" y="358" width="206" height="54" fill="#ffe047" stroke="#0a0a0a" stroke-width="2"/>
+    <text x="82" y="382" font-family="Archivo, 'Helvetica Neue', Inter, ui-sans-serif, system-ui, sans-serif"
+          font-size="15" font-weight="800" fill="#0a0a0a">Export</text>
+    <text x="82" y="401" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+          font-size="11" fill="#0a0a0a" opacity="0.75">one button</text>
+
+    <line x1="276" y1="385" x2="358" y2="385" stroke="#0a0a0a" stroke-width="2" marker-end="url(#f-tip)"/>
+
+    <rect x="372" y="364" width="292" height="54" fill="#0a0a0a"/>
+    <rect x="366" y="358" width="292" height="54" fill="#ffffff" stroke="#0a0a0a" stroke-width="2"/>
+    <text x="384" y="382" font-family="Archivo, 'Helvetica Neue', Inter, ui-sans-serif, system-ui, sans-serif"
+          font-size="15" font-weight="800" fill="#0a0a0a">Redact · hash · review</text>
+    <text x="384" y="401" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+          font-size="11" fill="#ff4d3d">credentials stripped before write</text>
+
+    <line x1="664" y1="385" x2="708" y2="385" stroke="#0a0a0a" stroke-width="2" marker-end="url(#f-tip)"/>
+  </g>
+
+  <!-- ═══════ Companion: the capsule ═══════ -->
+  <g>
+    <rect x="722" y="152" width="232" height="266" fill="#0a0a0a"/>
+    <rect x="716" y="146" width="232" height="266" fill="#ffffff" stroke="#0a0a0a" stroke-width="2"/>
+
+    <rect x="716" y="146" width="232" height="34" fill="#0a0a0a"/>
+    <text x="734" y="169" font-family="Archivo, 'Helvetica Neue', Inter, ui-sans-serif, system-ui, sans-serif"
+          font-size="14" font-weight="800" letter-spacing="0.4" fill="#ffffff">CAPSULE</text>
+    <rect x="906" y="155" width="26" height="16" fill="#1faa5f"/>
+
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+       font-size="11.5" fill="#3d3d3d">
+      <text x="734" y="206">manifest.json</text>
+      <text x="734" y="230">README_FOR_AGENT.md</text>
+      <text x="734" y="254">visual/ board · frames</text>
+      <text x="734" y="278">page/ DOM · CSS · a11y</text>
+      <text x="734" y="302">runtime/ console · network</text>
+      <text x="734" y="326">framework/ route · state</text>
+      <text x="734" y="350" fill="#ff4d3d">security/ redaction-report</text>
+      <text x="734" y="380" fill="#1faa5f">integrity.json · SHA-256</text>
+    </g>
+  </g>
+
+  <!-- ═══════ Agent ═══════ -->
+  <g>
+    <line x1="954" y1="278" x2="998" y2="278" stroke="#0a0a0a" stroke-width="2" marker-end="url(#f-tip)"/>
+
+    <rect x="1012" y="240" width="142" height="86" fill="#0a0a0a"/>
+    <rect x="1006" y="234" width="142" height="86" fill="#dde6ff" stroke="#0a0a0a" stroke-width="2"/>
+    <text x="1024" y="260" font-family="Archivo, 'Helvetica Neue', Inter, ui-sans-serif, system-ui, sans-serif"
+          font-size="15" font-weight="800" fill="#0a0a0a">Coding agent</text>
+    <text x="1024" y="281" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+          font-size="11" fill="#0a0a0a" opacity="0.72">reads over MCP</text>
+    <text x="1024" y="298" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+          font-size="11" fill="#0a0a0a" opacity="0.72">or straight from</text>
+    <text x="1024" y="313" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+          font-size="11" fill="#0a0a0a" opacity="0.72">disk</text>
+  </g>
+
+  <!-- ═══════ The honesty line ═══════ -->
+  <g>
+    <rect x="70" y="452" width="1072" height="62" fill="#0a0a0a"/>
+    <rect x="64" y="446" width="1072" height="62" fill="#ffffff" stroke="#0a0a0a" stroke-width="2"/>
+    <rect x="64" y="446" width="10" height="62" fill="#ffe047"/>
+    <text x="92" y="472" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+          font-size="11" font-weight="700" letter-spacing="1.4" fill="#0a0a0a">THE CAPSULE STATES ITS OWN LIMITS</text>
+    <text x="92" y="494" font-family="Archivo, 'Helvetica Neue', Inter, ui-sans-serif, system-ui, sans-serif"
+          font-size="13.5" fill="#3d3d3d">Runtime evidence begins when capture was armed. Truncated buffers say so. A skipped snapshot says so — an agent never reads absence of evidence as evidence of absence.</text>
+  </g>
+</svg>

@@ -31,35 +31,49 @@ Three rules:
 
 ## Colour
 
-Colour carries meaning here. These four never swap roles.
+Colour carries meaning here. These five never swap roles.
 
 | Token | Hex | Means |
 | --- | --- | --- |
-| `--violet` | `#7C6BFF` | The tool itself: selection, primary action, chrome |
-| `--teal` | `#2AD9C4` | A confirmed fact: armed, captured, verified, 200 OK |
-| `--amber` | `#FFB454` | A region *you* drew, and anything needing review |
-| `--coral` | `#FF5C7A` | Your annotation, and destructive actions |
+| `--yellow` | `#ffe047` | The thing to press next |
+| `--ink` | `#0a0a0a` | Structure, primary action |
+| `--blue` | `#2f6bff` | A tool you are holding |
+| `--red` | `#ff4d3d` | Your annotation, and destructive actions |
+| `--green` | `#1faa5f` | A confirmed fact |
 
 Field and type:
 
 | Token | Hex |
 | --- | --- |
-| `--ink-900` | `#0B0A12` |
-| `--ink-700` | `#171331` |
-| `--paper` | `#F7F7FB` |
-| `--paper-dim` | `#B8B6CD` |
-| `--paper-mute` | `#8B8AA6` |
+| `--paper` | `#ffffff` |
+| `--paper-2` | `#f4f2ed` |
+| `--ink-soft` | `#3d3d3d` |
+| `--ink-mute` | `#7a7873` |
+| `--line-soft` | `#d8d5cc` |
 
-The surface is always dark. The panel sits beside the application under
-inspection and must never compete with it for attention.
+Editorial brutalism: paper field, heavy black display type, one loud yellow. The
+panel sits beside the app you are debugging, so it does not try to blend in — it
+reads like a printed worksheet with four numbered steps.
+
+Dark mode inverts the field but keeps the yellow, the red and the black tape
+band, because the yellow is the "press this next" signal and must stay the
+loudest thing on screen either way.
+
+Form is hard-edged: `--r-sm/md/lg` are all `0px`, and roundness is reserved for
+pills and the mark. Shadows are offset planes (`3px 3px 0`), never blur.
 
 Canonical values live in [`extension/tokens.css`](../extension/tokens.css) — that
-file is the source of truth, this table is the explanation.
+file is the source of truth, this table is the explanation. If the two disagree,
+the stylesheet wins.
 
 ## Mark
 
-A capsule tilted −45°, split by a seam, with a teal reticle at its centre: the
-human pointing at the exact thing, sealed into a container.
+A disc with a wedge taken out of it and a reticle at its centre: a container
+with its contents extracted, open toward the thing it took them from, and the
+human pointing at the exact spot.
+
+Two flat colours, hard edges, no gradient — the mark has to survive being 16
+pixels wide in a browser toolbar, so nothing in it is subtle.
 
 - Geometry: [`mark.svg`](mark.svg) · lockup: [`logo.svg`](logo.svg) · social:
   [`banner.svg`](banner.svg)
@@ -67,13 +81,16 @@ human pointing at the exact thing, sealed into a container.
   [`tools/build-icons.mjs`](../tools/build-icons.mjs) — run `npm run icons`.
   Never hand-edit files in `extension/icons/`.
 - Clear space: one capsule-corner-radius on all sides.
-- The reticle is never any colour but teal. The field is never any colour but
-  the violet gradient.
+- The field is `--yellow` and the capsule is `--ink`. Never inverted, never
+  gradient, never a third colour.
+- The wedge is the arc from 192° round to 118°.
+  [`tools/build-icons.mjs`](../tools/build-icons.mjs) reproduces that geometry
+  analytically — change one and change the other.
 
 ## Type
 
-- Interface: `ui-sans-serif, system-ui` — no webfont, because the panel must
-  paint instantly and offline.
+- Display and interface: `Archivo` at weight 800–900 for headings, falling back
+  to `Helvetica Neue, Inter, ui-sans-serif, system-ui`.
 - Evidence, counts, IDs, paths, status: `ui-monospace`. If a number can be
   compared to another number, it is monospace.
 

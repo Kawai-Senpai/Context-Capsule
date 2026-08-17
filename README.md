@@ -44,25 +44,9 @@ structured capsule an agent can read over MCP.
 
 ## How it works
 
-```
-     you                     extension                  companion              agent
-      │                          │                          │                    │
-      │  arm ────────────────────▶  chrome.debugger          │                    │
-      │                          │  rolling buffer:          │                    │
-      │  click a component ──────▶  console · network        │                    │
-      │  ↑↓←→ walk the tree      │  exceptions · nav         │                    │
-      │  box · arrow · pen · text│                          │                    │
-      │                          │                          │                    │
-      │  "what's wrong / what    │                          │                    │
-      │   should happen" ────────▶  freeze the window       │                    │
-      │                          │  screenshot + crop        │                    │
-      │  add frame ──────────────▶  DOM · CSS · a11y ·      │                    │
-      │  (resize, reroute, ...)  │  listeners · app state    │                    │
-      │                          │                          │                    │
-      │  export ─────────────────▶  redact · hash · review ──▶ capsule directory  │
-      │                          │                          │  capsule://…       │
-      │  paste prompt ───────────┼──────────────────────────┼───────────────────▶ reads it
-```
+<div align="center">
+  <img src="brand/flow.svg" alt="You arm capture and point at a component; the extension records console, network, DOM and CSS; the companion redacts and seals a capsule; the agent reads it over MCP." width="100%">
+</div>
 
 Every selection gets an ID — `A`, `B`, `C` — and that ID is the join key across
 the screenshot, the DOM files, the component state and the manifest.
