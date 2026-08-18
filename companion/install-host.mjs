@@ -14,6 +14,10 @@ import {
   promisify
 } from "node:util";
 
+import {
+  deriveExtensionId
+} from "./derive-id.mjs";
+
 const execFileAsync =
   promisify(execFile);
 
@@ -21,17 +25,22 @@ const here = path.dirname(
   fileURLToPath(import.meta.url)
 );
 
+/*
+ * The id is optional: extension/manifest.json pins a signing key, so the id is
+ * deterministic and can be derived. An explicit argument still wins, for a
+ * build whose key was replaced.
+ */
 const extensionId =
-  process.argv[2];
+  process.argv[2] ||
+  deriveExtensionId();
 
 if (
-  !extensionId ||
   !/^[a-p]{32}$/.test(
     extensionId
   )
 ) {
   console.error(
-    "Usage: node install-host.mjs <32-character Chrome extension ID>"
+    "Usage: node install-host.mjs [32-character Chrome extension ID]"
   );
 
   process.exit(1);

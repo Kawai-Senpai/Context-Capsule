@@ -9,7 +9,8 @@
   "scripts": {
     "native": "node native-host.js",
     "mcp": "node mcp-server.js",
-    "install-host": "node install-host.mjs"
+    "install-host": "node install-host.mjs",
+    "id": "node derive-id.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",

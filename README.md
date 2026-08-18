@@ -94,17 +94,29 @@ npm install
 **2. Load the extension**
 
 `chrome://extensions` → enable **Developer mode** → **Load unpacked** →
-select `extension/` → copy the 32-character extension ID.
+select `extension/`. No need to copy the extension ID; step 3 derives it.
 
 **3. Register the native messaging host**
 
-```bash
-cd companion
-node install-host.mjs YOUR_EXTENSION_ID
+Run the script for your platform. Windows:
+
+```bat
+companion\install-host.bat
 ```
 
-The ID must be exactly 32 lowercase characters in `a`–`p`. Restart Chrome so it
-picks up the host manifest.
+macOS (or double-click `install-host.command` in Finder) and Linux:
+
+```bash
+companion/install-host.sh
+```
+
+No extension ID needed: `extension/manifest.json` pins a signing key, so the ID
+is deterministic and the script derives it. Pass one as the first argument only
+if you build with a different key; it must be exactly 32 lowercase characters in
+`a`–`p`. Print the derived ID with `node companion/derive-id.mjs`.
+
+Then quit Chrome completely and start it again: it only reads the host
+registration at startup.
 
 **4. Point your agent at the MCP server**
 
@@ -251,10 +263,10 @@ store binds the ID permanently.
 
 | Target | How | Catch |
 | --- | --- | --- |
-| Development | Load unpacked from `extension/` | Re-run `install-host.mjs` whenever the ID changes |
+| Development | Load unpacked from `extension/` | Re-run the install script if you move the checkout: the launcher stores an absolute path |
 | Web Store | Upload `dist/*-extension-*.zip` | Privacy policy mandatory; `debugger` + `nativeMessaging` means slow review |
 | Self-hosted CRX | `npm run package -- --crx` | Chrome on Windows/macOS **refuses** non-store CRX installs without enterprise policy (`ExtensionInstallForcelist`) |
-| Companion | `dist/*-companion-*.tgz` then `node install-host.mjs <id>` | Needs Node on the machine; the launcher hardcodes the current `node` path, so upgrading Node breaks it |
+| Companion | `dist/*-companion-*.tgz` then `install-host.bat` / `install-host.sh` | Needs Node on the machine; the launcher hardcodes the current `node` path, so upgrading Node breaks it |
 
 `install-host.mjs` registers per-OS: a `NativeMessagingHosts/*.json` file on
 macOS and Linux, an `HKCU` registry value under
